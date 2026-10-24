@@ -9,5 +9,6 @@ class User(SQLModel, table=True):
     hashed_password: str
     full_name: str
     is_active: bool = Field(default=True)
-    # Change this line:
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    belt_rank: str = Field(default="White") 
+    
