@@ -3,6 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from app.database import get_session
 from app.models.user_model import User
+from app.models.auth_token_model import AuthToken
+from app.models.password_reset_model import PasswordResetCode
+from app.schemas import UserPublic
+from app.security import hash_password
 from pydantic import BaseModel
 from typing import Optional
 
@@ -31,23 +35,23 @@ class UserUpdate(BaseModel):
 # --- ENDPOINTS (CRUD) ---
 
 # 1. CREATE (POST)
-# response_model=User ensures we don't accidentally send the password back
-@router.post("/", response_model=User)
+# response_model=UserPublic ensures we never send the password hash back
+@router.post("/", response_model=UserPublic)
 def create_user(user_data: UserCreate, session: Session = Depends(get_session)):
     # Check if a user with this email already exists in the database
-    statement = select(User).where(User.email == user_data.email)
+    email = user_data.email.strip().lower()
+    statement = select(User).where(User.email == email)
     existing_user = session.exec(statement).first()
     
     # If they exist, stop and send a 400 Bad Request error
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create the new user object
-    # (Note: We are storing the password in plain text JUST for testing. We will hash it soon)
+    # Create the new user object (password is stored as a salted hash, never plain text)
     new_user = User(
-        email=user_data.email,
+        email=email,
         full_name=user_data.full_name,
-        hashed_password=user_data.password 
+        hashed_password=hash_password(user_data.password),
     )
     
     # Save to database
@@ -60,7 +64,7 @@ def create_user(user_data: UserCreate, session: Session = Depends(get_session)):
 
 # 2. READ ALL (GET)
 # We must put this BEFORE /{user_id} so it doesn't accidentally get caught by the ID route
-@router.get("/", response_model=list[User])
+@router.get("/", response_model=list[UserPublic])
 def get_all_users(session: Session = Depends(get_session)):
     # Fetch every user from the database
     users = session.exec(select(User)).all()
@@ -68,7 +72,7 @@ def get_all_users(session: Session = Depends(get_session)):
 
 
 # 3. READ ONE (GET by ID)
-@router.get("/{user_id}", response_model=User)
+@router.get("/{user_id}", response_model=UserPublic)
 def get_user(user_id: int, session: Session = Depends(get_session)):
     # Look for a specific user using their Primary Key (ID)
     user = session.get(User, user_id)
@@ -81,7 +85,7 @@ def get_user(user_id: int, session: Session = Depends(get_session)):
 
 # 4. UPDATE (PATCH)
 # PATCH is used for partial updates. PUT is used to replace the whole object.
-@router.patch("/{user_id}", response_model=User)
+@router.patch("/{user_id}", response_model=UserPublic)
 def update_user(user_id: int, user_data: UserUpdate, session: Session = Depends(get_session)):
     # Find the user first
     user = session.get(User, user_id)
@@ -95,7 +99,9 @@ def update_user(user_id: int, user_data: UserUpdate, session: Session = Depends(
     # If the user is updating their password, we map the plain "password" from the request
     # to the "hashed_password" column in the database.
     if "password" in update_data:
-        update_data["hashed_password"] = update_data.pop("password")
+        update_data["hashed_password"] = hash_password(update_data.pop("password"))
+    if update_data.get("email"):
+        update_data["email"] = update_data["email"].strip().lower()
         
     # Loop through the updated data and apply it to the user object
     for key, value in update_data.items():
@@ -116,7 +122,12 @@ def delete_user(user_id: int, session: Session = Depends(get_session)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    # Delete the user and commit
+    # Remove their login sessions first, then the user
+    for token in session.exec(select(AuthToken).where(AuthToken.user_id == user.id)).all():
+        session.delete(token)
+    for code in session.exec(select(PasswordResetCode).where(PasswordResetCode.user_id == user.id)).all():
+        session.delete(code)
+    session.flush()
     session.delete(user)
     session.commit()
     return None

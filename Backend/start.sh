@@ -24,4 +24,5 @@ echo "Activating environment..."
 source .venv/Scripts/activate
 
 echo "Starting API..."
-uvicorn app.main:app --reload
+# --host 0.0.0.0 lets phones on your Wi-Fi reach the API (not just this PC)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
