@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { BeltMark } from './BeltMark';
+import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { belts, colors, radius, space } from '../theme';
 
 type Props = {
@@ -14,20 +15,33 @@ type Props = {
   footer?: ReactNode;
 };
 
-/** Shared frame for the sign-in, sign-up and password-reset screens. */
+/**
+ * Shared frame for the sign-in, sign-up and password-reset screens.
+ *
+ * When the keyboard opens, the screen shrinks to the space above it and the
+ * logo collapses, so the field being typed in stays visible.
+ */
 export function AuthLayout({ title, subtitle, banner, children, footer }: Props) {
+  const keyboardOpen = useKeyboardVisible();
+
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      // Android apps are drawn edge-to-edge, so the window no longer shrinks for the
+      // keyboard by itself; 'padding' does that job on both platforms.
+      behavior={Platform.OS === 'web' ? undefined : 'padding'}
+    >
       <StatusBar style="light" />
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, keyboardOpen && styles.scrollKeyboard]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.column}>
-          <View style={styles.header}>
-            <BeltMark />
-            <Text style={styles.tagline}>Track every roll. See every stripe.</Text>
+          <View style={[styles.header, keyboardOpen && styles.headerKeyboard]}>
+            <BeltMark size={keyboardOpen ? 'sm' : 'lg'} />
+            {keyboardOpen ? null : <Text style={styles.tagline}>Track every roll. See every stripe.</Text>}
           </View>
 
           <View style={styles.card}>
@@ -37,13 +51,15 @@ export function AuthLayout({ title, subtitle, banner, children, footer }: Props)
             {children}
           </View>
 
-          {footer}
+          {keyboardOpen ? null : footer}
 
-          <View style={styles.beltRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            {Object.values(belts).map((c) => (
-              <View key={c} style={[styles.beltDot, { backgroundColor: c }]} />
-            ))}
-          </View>
+          {keyboardOpen ? null : (
+            <View style={styles.beltRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {Object.values(belts).map((c) => (
+                <View key={c} style={[styles.beltDot, { backgroundColor: c }]} />
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -73,8 +89,11 @@ const styles = StyleSheet.create({
     paddingTop: space(16),
     paddingBottom: space(10),
   },
+  // Keyboard open: start at the top with less padding so the form fits above the keyboard.
+  scrollKeyboard: { justifyContent: 'flex-start', paddingTop: space(12), paddingBottom: space(4) },
   column: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   header: { alignItems: 'center', marginBottom: space(8) },
+  headerKeyboard: { marginBottom: space(4) },
   tagline: { color: colors.textMuted, fontSize: 15, marginTop: space(3) },
   card: {
     backgroundColor: colors.surface,

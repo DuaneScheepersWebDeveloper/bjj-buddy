@@ -1,8 +1,44 @@
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
+
 /**
  * Small wrapper around fetch for talking to the BJJ Buddy API.
- * Set the address in Mobile/.env:  EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
+ *
+ * Where the API lives is worked out automatically while developing:
+ *  - In a web browser: the same computer the page came from, port 8000.
+ *  - On a phone (Expo Go): the computer running `npx expo start`, port 8000.
+ *    "localhost" on a phone means the phone itself, so we never use it there.
+ * Set EXPO_PUBLIC_API_URL in Mobile/.env only to point somewhere else
+ * (e.g. a deployed server).
  */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
+const API_PORT = 8000;
+const LOCALHOST_URL = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i;
+
+/** IP address of the computer running the Expo dev server, e.g. "192.168.1.23". */
+function devServerIp(): string | null {
+  const hostUri = Constants.expoConfig?.hostUri ?? ''; // e.g. "192.168.1.23:8081"
+  const host = hostUri.split(':')[0];
+  // Android emulator connected through "localhost": the PC is 10.0.2.2 from inside the emulator.
+  if (Platform.OS === 'android' && (host === 'localhost' || host === '127.0.0.1')) return '10.0.2.2';
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(host) && host !== '127.0.0.1' ? host : null;
+}
+
+function resolveApiUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.trim().replace(/\/+$/, '') || null;
+
+  if (Platform.OS === 'web') {
+    const host = (globalThis as { location?: { hostname?: string } }).location?.hostname || 'localhost';
+    return configured ?? `http://${host}:${API_PORT}`;
+  }
+
+  if (configured && !LOCALHOST_URL.test(configured)) return configured;
+  const ip = devServerIp();
+  if (ip) return `http://${ip}:${API_PORT}`;
+  return configured ?? `http://localhost:${API_PORT}`;
+}
+
+export const API_URL = resolveApiUrl();
+if (__DEV__) console.log(`[api] Using API at ${API_URL}`);
 
 export type User = {
   id: number;

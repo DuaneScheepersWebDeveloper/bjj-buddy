@@ -1,14 +1,12 @@
 import { Platform } from 'react-native';
 
+import { API_URL } from './api';
+
 /**
  * Sends app errors to the BJJ Buddy API (POST /errors/client), where they are
  * stored in the error_log table with source = 'mobile'.
- *
- * Set the API address in Mobile/.env:
- *   EXPO_PUBLIC_API_URL=http://192.168.x.x:8000
- * (a phone or emulator can't reach your PC through "localhost").
+ * The API address is worked out in ./api.ts.
  */
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 type Level = 'WARNING' | 'ERROR' | 'CRITICAL';
 
