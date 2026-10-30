@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import create_db_and_tables
 from app.error_logging import setup_error_logging
 from app.error_middleware import ErrorLoggingMiddleware, register_exception_handlers
-from app.routers import auth, users, sessions, errors
+from app.routers import admin, auth, users, sessions, errors
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,6 +19,7 @@ app = FastAPI(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(users.router)
 app.include_router(sessions.router)
 app.include_router(errors.router)

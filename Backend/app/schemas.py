@@ -12,5 +12,7 @@ class UserPublic(BaseModel):
     email: str
     full_name: str
     belt_rank: str
+    stripes: int
+    role: str
     is_active: bool
     created_at: datetime

@@ -2,7 +2,7 @@
 
 A training tracker for Brazilian Jiu-Jitsu. Log your sessions, follow your belt progress, and see how your training adds up.
 
-> **Status:** early development. Login, sign-up, log out and password reset work. The home screen has a main menu; its sections are placeholders for now.
+> **Status:** early development. Login, sign-up, log out, password reset and admin user management work. The home screen has a main menu; most sections are placeholders for now.
 
 ## What's in here
 
@@ -96,6 +96,7 @@ npx expo start           # then scan the QR code with Expo Go on your phone
 
 - Send the token on requests as `Authorization: Bearer <token>`. In `/docs`, click **Authorize** and paste it.
 - In the app, the token is stored in the phone's secure storage (the browser's localStorage on web), so you stay logged in for 30 days.
+- **Admins:** run `python -m app.make_admin you@example.com` in `Backend` to make yourself an admin. Admins get an **Admin** screen in the menu to edit, activate and deactivate users. See [`Backend/AUTH.md`](Backend/AUTH.md).
 - **Password reset codes are printed in the backend terminal** while `EMAIL_BACKEND=console`. To send real emails via Gmail, see [`Backend/AUTH.md`](Backend/AUTH.md).
 
 ## Project layout
@@ -108,11 +109,12 @@ Backend/
 │   ├── database.py          DB connection, table creation, simple column migrations
 │   ├── security.py          Password hashing, login tokens, get_current_user
 │   ├── email_sender.py      Sends emails (console or SMTP)
+│   ├── make_admin.py        Command to make a user an admin
 │   ├── schemas.py           Shapes of data the API returns
 │   ├── error_logging.py     Error capture into the error_log table
 │   ├── error_middleware.py
 │   ├── models/              Database tables (user, session, auth_token, password_reset_code, error_log)
-│   └── routers/             Endpoints: auth, users, sessions, errors
+│   └── routers/             Endpoints: auth, admin, users, sessions, errors
 ├── sql/error_queries.sql    Handy queries for reading error logs
 ├── AUTH.md                  Login and password reset details
 ├── ERROR_LOGGING.md         How error logging works
@@ -122,7 +124,7 @@ Mobile/
 ├── App.tsx                  Entry: shows login or home depending on login state
 ├── src/
 │   ├── auth/AuthContext.tsx Login state and sign in / out / reset actions
-│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, SectionPlaceholder
+│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, AdminUsersScreen, AdminEditUser, SectionPlaceholder
 │   ├── components/          AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
 │   ├── navigation/          menuItems.ts: the sections in the main menu
 │   ├── lib/                 api.ts (talks to the backend), tokenStorage.ts, errorReporter.ts
@@ -133,7 +135,7 @@ Mobile/
 ## Good to know
 
 - **Adding a field to a model?** `create_all` only creates new tables. It doesn't add columns to existing ones. Add an `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` line to the list in `Backend/app/database.py` (or move to Alembic migrations later).
-- **Protecting an endpoint:** add `user: User = Depends(get_current_user)` (from `app.security`) to its parameters.
+- **Protecting an endpoint:** add `user: User = Depends(get_current_user)` (any logged-in user) or `admin: User = Depends(require_admin)` (admins only), both from `app.security`.
 - **Errors** from the API and the app are saved to the `error_log` table. See [`Backend/ERROR_LOGGING.md`](Backend/ERROR_LOGGING.md).
 - **Quieter terminal:** set `echo=False` in `Backend/app/database.py` to stop printing every SQL query.
 
@@ -152,7 +154,8 @@ Mobile/
 
 - [ ] Decide on and build the home screen
 - [ ] Log training sessions from the app
-- [ ] Lock `/users` and `/sessions` endpoints to the logged-in user
+- [x] Lock `/users` endpoints to the logged-in user / admins
+- [ ] Lock `/sessions` endpoints to the logged-in user
 - [ ] Belt and stripe progress tracking
 - [ ] Real email sending for password reset
 - [ ] Alembic database migrations

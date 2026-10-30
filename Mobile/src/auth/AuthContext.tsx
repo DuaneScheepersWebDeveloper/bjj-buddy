@@ -13,6 +13,10 @@ type AuthState = {
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
+  /** Call the API as the logged-in user. Logs out automatically if the session has ended. */
+  request: <T>(path: string, options?: { method?: string; body?: unknown }) => Promise<T>;
+  /** Re-fetch the logged-in user (e.g. after a role change). */
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -100,6 +104,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [finishSignIn],
   );
 
+  const request = useCallback(
+    async <T,>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> => {
+      try {
+        return await api<T>(path, { ...options, token });
+      } catch (err) {
+        // Session expired, or an admin deactivated this account: back to the login screen.
+        if (err instanceof ApiError && err.status === 401) await resetToSignedOut();
+        throw err;
+      }
+    },
+    [token, resetToSignedOut],
+  );
+
+  const refreshUser = useCallback(async () => {
+    const me = await request<User>('/auth/me');
+    setUser(me);
+  }, [request]);
+
   const signOut = useCallback(async () => {
     const current = token;
     // Log out locally straight away so the button feels instant,
@@ -109,8 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, resetToSignedOut]);
 
   const value = useMemo(
-    () => ({ status, user, signIn, signUp, signOut, requestPasswordReset, resetPassword }),
-    [status, user, signIn, signUp, signOut, requestPasswordReset, resetPassword],
+    () => ({ status, user, signIn, signUp, signOut, requestPasswordReset, resetPassword, request, refreshUser }),
+    [status, user, signIn, signUp, signOut, requestPasswordReset, resetPassword, request, refreshUser],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

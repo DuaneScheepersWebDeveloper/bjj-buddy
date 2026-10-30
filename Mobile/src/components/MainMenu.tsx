@@ -1,7 +1,8 @@
 import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { User } from '../lib/api';
-import { MENU_ITEMS, type SectionId } from '../navigation/menuItems';
-import { belts, colors, radius, space } from '../theme';
+import { menuItemsFor, type SectionId } from '../navigation/menuItems';
+import { BeltBadge, formatRank } from './BeltBadge';
+import { colors, radius, space } from '../theme';
 
 type Props = {
   /** 0 = hidden, 1 = fully open. Owned by the screen so the button and menu animate together. */
@@ -23,7 +24,6 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
   if (!mounted) return null;
 
   const panelWidth = Math.min(320, width - space(8));
-  const beltColor = belts[user?.belt_rank ?? 'White'] ?? belts.White;
 
   const panelAnim = {
     opacity: progress,
@@ -45,16 +45,21 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
         accessibilityLabel="Main menu"
       >
         <View style={styles.userRow}>
-          <View style={[styles.userBelt, { backgroundColor: beltColor }]} />
+          <View style={styles.userBelt}>
+            <BeltBadge belt={user?.belt_rank ?? 'White'} stripes={user?.stripes} size="sm" />
+          </View>
           <View style={styles.userText}>
             <Text style={styles.userName} numberOfLines={1}>{user?.full_name}</Text>
-            <Text style={styles.userRank}>{user?.belt_rank ?? 'White'} belt</Text>
+            <Text style={styles.userRank}>
+              {formatRank(user?.belt_rank, user?.stripes)}
+              {user?.role === 'admin' ? ' · Admin' : ''}
+            </Text>
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        {MENU_ITEMS.map((item) => {
+        {menuItemsFor(user?.role).map((item) => {
           const isActive = item.id === active;
           return (
             <Pressable
@@ -106,7 +111,7 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   userRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space(4), paddingVertical: space(3) },
-  userBelt: { width: 32, height: 8, borderRadius: 2, borderWidth: 1, borderColor: colors.border, marginRight: space(3) },
+  userBelt: { marginRight: space(3) },
   userText: { flex: 1 },
   userName: { color: colors.text, fontSize: 16, fontWeight: '700' },
   userRank: { color: colors.textMuted, fontSize: 13, marginTop: 2 },

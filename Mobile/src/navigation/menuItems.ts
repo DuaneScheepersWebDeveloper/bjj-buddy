@@ -1,5 +1,5 @@
 /** The sections reachable from the main (hamburger) menu. Add new ones here. */
-export type SectionId = 'logSession' | 'stats' | 'plan' | 'profile' | 'settings' | 'support';
+export type SectionId = 'logSession' | 'stats' | 'plan' | 'profile' | 'settings' | 'support' | 'admin';
 
 export type MenuItem = {
   id: SectionId;
@@ -7,6 +7,8 @@ export type MenuItem = {
   hint: string;
   /** Highlighted as the main action. */
   primary?: boolean;
+  /** Only shown to admins. */
+  adminOnly?: boolean;
 };
 
 export const MENU_ITEMS: MenuItem[] = [
@@ -16,7 +18,13 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'profile', label: 'Profile', hint: 'Belt, stripes and gym' },
   { id: 'settings', label: 'Settings', hint: 'Account and app preferences' },
   { id: 'support', label: 'Support', hint: 'Help, feedback and contact' },
+  { id: 'admin', label: 'Admin', hint: 'Manage users and access', adminOnly: true },
 ];
+
+/** The menu items this user is allowed to see. */
+export function menuItemsFor(role: string | undefined): MenuItem[] {
+  return MENU_ITEMS.filter((m) => !m.adminOnly || role === 'admin');
+}
 
 export function menuItem(id: SectionId): MenuItem {
   return MENU_ITEMS.find((m) => m.id === id)!;

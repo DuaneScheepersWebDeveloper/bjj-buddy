@@ -45,6 +45,9 @@ export type User = {
   email: string;
   full_name: string;
   belt_rank: string;
+  /** Stripes on the current belt, 0-4. */
+  stripes: number;
+  role: 'user' | 'admin';
   is_active: boolean;
   created_at: string;
 };

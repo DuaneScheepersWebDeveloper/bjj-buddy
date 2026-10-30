@@ -17,6 +17,8 @@ def get_session():
 # databases get the column too. (Later on, Alembic migrations can replace this.)
 _ADD_MISSING_COLUMNS = [
     """ALTER TABLE "user" ADD COLUMN IF NOT EXISTS belt_rank VARCHAR NOT NULL DEFAULT 'White'""",
+    """ALTER TABLE "user" ADD COLUMN IF NOT EXISTS role VARCHAR NOT NULL DEFAULT 'user'""",
+    """ALTER TABLE "user" ADD COLUMN IF NOT EXISTS stripes INTEGER NOT NULL DEFAULT 0""",
 ]
 
 def create_db_and_tables():

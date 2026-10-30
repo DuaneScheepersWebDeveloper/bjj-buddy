@@ -13,11 +13,13 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../auth/AuthContext';
 import { BeltMark } from '../components/BeltMark';
+import { BeltBadge, formatRank } from '../components/BeltBadge';
 import { HamburgerButton } from '../components/HamburgerButton';
 import { MainMenu } from '../components/MainMenu';
 import { SectionPlaceholder } from './SectionPlaceholder';
+import { AdminUsersScreen } from './AdminUsersScreen';
 import type { SectionId } from '../navigation/menuItems';
-import { belts, colors, radius, space } from '../theme';
+import { colors, radius, space } from '../theme';
 
 // Space above the header so it clears the status bar / notch.
 const HEADER_TOP =
@@ -27,7 +29,7 @@ const MENU_TOP = HEADER_TOP + BUTTON_SIZE + space(2);
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function HomeScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshUser } = useAuth();
   const [section, setSection] = useState<SectionId | null>(null);
 
   // --- Menu open/close animation -------------------------------------------
@@ -36,6 +38,7 @@ export function HomeScreen() {
   const [menuMounted, setMenuMounted] = useState(false);
 
   const openMenu = useCallback(() => {
+    refreshUser().catch(() => {}); // pick up role changes made by an admin
     setMenuMounted(true);
     setMenuOpen(true);
     Animated.timing(progress, {
@@ -44,7 +47,7 @@ export function HomeScreen() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
-  }, [progress]);
+  }, [progress, refreshUser]);
 
   const closeMenu = useCallback(
     (then?: () => void) => {
@@ -81,7 +84,7 @@ export function HomeScreen() {
   // --- Content ----------------------------------------------------------------
   const firstName = user?.full_name.split(' ')[0] ?? 'there';
   const rank = user?.belt_rank ?? 'White';
-  const beltColor = belts[rank] ?? belts.White;
+  const stripes = user?.stripes ?? 0;
 
   return (
     <View style={styles.flex}>
@@ -89,7 +92,9 @@ export function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.column}>
-          {section ? (
+          {section === 'admin' && user?.role === 'admin' ? (
+            <AdminUsersScreen onBack={() => setSection(null)} />
+          ) : section && section !== 'admin' ? (
             <SectionPlaceholder section={section} onBack={() => setSection(null)} />
           ) : (
             <>
@@ -99,9 +104,9 @@ export function HomeScreen() {
               <View style={styles.card}>
                 <Text style={styles.cardLabel}>Current rank</Text>
                 <View style={styles.rankRow}>
-                  <View style={[styles.rankBelt, { backgroundColor: beltColor }]} />
-                  <Text style={styles.rankText}>{rank} belt</Text>
+                  <BeltBadge belt={rank} stripes={stripes} size="lg" />
                 </View>
+                <Text style={styles.rankText}>{formatRank(rank, stripes)}</Text>
                 <Text style={styles.email}>{user?.email}</Text>
               </View>
             </>
@@ -169,7 +174,6 @@ const styles = StyleSheet.create({
   },
   cardLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4, marginBottom: space(3) },
   rankRow: { flexDirection: 'row', alignItems: 'center', gap: space(3) },
-  rankBelt: { width: 44, height: 10, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
-  rankText: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  rankText: { color: colors.text, fontSize: 18, fontWeight: '700', marginTop: space(3) },
   email: { color: colors.textMuted, fontSize: 14, marginTop: space(3) },
 });

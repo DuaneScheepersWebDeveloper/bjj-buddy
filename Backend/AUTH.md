@@ -49,3 +49,46 @@ To send real emails through Gmail, add this to `Backend/.env`:
 
 The password must be a Gmail **App Password** (Google Account → Security → 2-Step Verification →
 App passwords), not your normal Gmail password. Any other SMTP provider works the same way.
+
+## User roles: admin and normal users
+
+Every user has a `role`: `user` (default) or `admin`. It's included in every user object the API returns.
+
+### Make your first admin
+
+Sign up in the app as normal, then from the `Backend` folder (with the virtual environment active):
+
+    python -m app.make_admin you@example.com
+    python -m app.make_admin you@example.com --remove   # back to a normal user
+
+Close and reopen the app. **Admin** now appears in the menu.
+
+### What admins can do
+
+| Endpoint | What it does |
+|---|---|
+| `GET /admin/users?search=&active=&role=` | List users, optionally filtered |
+| `GET /admin/summary` | Counts: total, active, inactive, admins |
+| `GET /admin/users/{id}` | One user's details |
+| `PATCH /admin/users/{id}` `{full_name, email, belt_rank, stripes, role, is_active}` | Edit any of these (send only what changes). Belt must be White, Blue, Purple, Brown or Black; stripes 0–4 |
+| `PATCH /admin/users/{id}/status` `{is_active}` | Activate or deactivate a user. Deactivating logs them out everywhere immediately |
+| `PATCH /admin/users/{id}/role` `{role}` | Make someone an admin, or a normal user |
+| `GET/POST/PATCH/DELETE /users/...` | Full access to any account |
+
+Admins can't deactivate, demote or delete **themselves**, so you can't lock yourself out.
+They can still edit their own name, email, belt and stripes.
+Users with logged training sessions can't be deleted (deactivate them instead), so no history is lost.
+
+### What normal users can do
+
+- `GET /users/{id}` and `PATCH /users/{id}` for **their own** account only.
+- Everything under `/auth`.
+
+A deactivated user gets "This account has been deactivated" when they try to log in.
+
+### Protecting new endpoints
+
+    from app.security import get_current_user, require_admin
+
+    def any_logged_in_user(user: User = Depends(get_current_user)): ...
+    def admins_only(admin: User = Depends(require_admin)): ...
