@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/lib/errorReporter';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
+import { OfflineSyncProvider } from './src/offline/OfflineSync';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BeltLoader } from './src/components/BeltLoader';
@@ -45,7 +46,9 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Root />
+        <OfflineSyncProvider>
+          <Root />
+        </OfflineSyncProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

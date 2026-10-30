@@ -63,7 +63,7 @@ This starts the Postgres container in Docker (creating it the first time), activ
 ```bash
 cd Mobile
 npm install
-npx expo install expo-secure-store react-dom react-native-web @expo/metro-runtime
+npx expo install expo-secure-store expo-constants expo-image-picker @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
 ```
 
 **No `.env` needed.** The app finds the backend by itself: `localhost:8000` in a browser, and your PC's Wi-Fi IP (taken from the Expo dev server) on a phone. Only set `EXPO_PUBLIC_API_URL` in `Mobile/.env` to point at a different server. See `.env.example`.
@@ -86,9 +86,11 @@ npx expo start           # then scan the QR code with Expo Go on your phone
 
 | Endpoint | What it does |
 |---|---|
-| `POST /auth/register` | Create an account (password 8+ characters) and log in |
-| `POST /auth/login` | Log in. Returns an `access_token` |
+| `POST /auth/register` | Create an account (name, username, email, password 8+ characters) and log in |
+| `POST /auth/login` | Log in with email **or username**. Returns an `access_token` |
 | `GET /auth/me` | The logged-in user |
+| `PATCH /auth/me` | Edit your own profile (name, username, email, gym, favourite sub, birthday, country) |
+| `PUT` / `DELETE /auth/me/avatar` | Set or remove your profile picture |
 | `POST /auth/logout` | Log out of this device |
 | `POST /auth/logout-all` | Log out of every device |
 | `POST /auth/forgot-password` | Email a 6-digit reset code |
@@ -96,7 +98,7 @@ npx expo start           # then scan the QR code with Expo Go on your phone
 
 - Send the token on requests as `Authorization: Bearer <token>`. In `/docs`, click **Authorize** and paste it.
 - In the app, the token is stored in the phone's secure storage (the browser's localStorage on web), so you stay logged in for 30 days.
-- **Admins:** run `python -m app.make_admin you@example.com` in `Backend` to make yourself an admin. Admins get an **Admin** screen in the menu to edit, activate and deactivate users. See [`Backend/AUTH.md`](Backend/AUTH.md).
+- **Admins:** run `python -m app.make_admin you@example.com` in `Backend` to make yourself an admin. Admins get an **Admin** section in the menu: **Users** (edit, activate and deactivate users) and **Tasks** (a shared to-do list for ideas that works offline). See [`Backend/AUTH.md`](Backend/AUTH.md).
 - **Password reset codes are printed in the backend terminal** while `EMAIL_BACKEND=console`. To send real emails via Gmail, see [`Backend/AUTH.md`](Backend/AUTH.md).
 
 ## Project layout
@@ -109,13 +111,17 @@ Backend/
 │   ├── database.py          DB connection, table creation, simple column migrations
 │   ├── security.py          Password hashing, login tokens, get_current_user
 │   ├── email_sender.py      Sends emails (console or SMTP)
+│   ├── avatars.py           Profile picture checks and file storage
+│   ├── idempotency.py       Makes outbox retries safe (no duplicates)
 │   ├── make_admin.py        Command to make a user an admin
+│   ├── usernames.py         Username rules (format, reserved names, uniqueness)
 │   ├── schemas.py           Shapes of data the API returns
 │   ├── error_logging.py     Error capture into the error_log table
 │   ├── error_middleware.py
 │   ├── models/              Database tables (user, session, auth_token, password_reset_code, error_log)
-│   └── routers/             Endpoints: auth, admin, users, sessions, errors
+│   └── routers/             Endpoints: auth, admin, admin_tasks, users, sessions, errors
 ├── sql/error_queries.sql    Handy queries for reading error logs
+├── uploads/                 Profile pictures (created automatically, not in git)
 ├── AUTH.md                  Login and password reset details
 ├── ERROR_LOGGING.md         How error logging works
 └── start.sh                 Starts the DB and API
@@ -124,13 +130,45 @@ Mobile/
 ├── App.tsx                  Entry: shows login or home depending on login state
 ├── src/
 │   ├── auth/AuthContext.tsx Login state and sign in / out / reset actions
-│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, AdminUsersScreen, AdminEditUser, SectionPlaceholder
-│   ├── components/          AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
+│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, ProfileScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
+│   ├── components/          Avatar, WeekWidget, AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
 │   ├── navigation/          menuItems.ts: the sections in the main menu
-│   ├── lib/                 api.ts (talks to the backend), tokenStorage.ts, errorReporter.ts
+│   ├── offline/             Offline outbox: save changes without signal, upload later
+│   ├── data/                countries.ts: country list for the profile
+│   ├── lib/                 api.ts (talks to the backend), week.ts (weekly counts/streaks), tokenStorage.ts, errorReporter.ts
 │   └── theme.ts             Colours, belt colours, spacing
 └── AGENTS.md                Notes for AI coding assistants working on the app
 ```
+
+## Working offline
+
+The app keeps working without signal (e.g. at the gym):
+
+- **Opening the app**: your profile is remembered on the phone, so it opens straight to the home screen.
+- **Saving changes**: anything sent with `sendOrQueue()` (from `src/offline/OfflineSync.tsx`) is tried
+  straight away. If the phone is offline, it's saved in an **outbox** on the phone (AsyncStorage) instead.
+  Right now profile edits and the admin **Tasks** list use it; Log a session will too.
+- **Uploading later**: the outbox uploads automatically, in order, when the app opens, comes back to the
+  foreground, or every 20 seconds while something is waiting. There's also an **Upload now** button.
+- **No duplicates**: each queued change has a random ID sent as the `Idempotency-Key` header. If a retry
+  repeats something the server already did, the server replays its original answer instead of doing it twice
+  (`Backend/app/idempotency.py`, table `idempotency_record`, kept 7 days).
+- **Status**: a small pill on the home screen shows "Offline · 2 changes saved on this phone", "Uploading…",
+  "All changes uploaded", or "1 change couldn't be saved" (tap it for details, Try again or Discard).
+- **Needs a connection**: logging in, changing your username/email (the server must check they're free),
+  and profile pictures.
+
+To use it for something new:
+
+```ts
+const { sendOrQueue } = useOfflineSync();
+const result = await sendOrQueue<Session>({
+  path: '/sessions', method: 'POST', body: {...}, label: 'Session at Gracie Barra',
+});
+if (result.status === 'queued') { /* saved on the phone, will upload later */ }
+```
+
+Include the date/time the user did the thing in the body (not when it uploads), since it may upload hours later.
 
 ## Good to know
 

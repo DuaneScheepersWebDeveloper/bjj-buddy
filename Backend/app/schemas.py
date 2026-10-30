@@ -1,4 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
+
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -10,9 +12,16 @@ class UserPublic(BaseModel):
 
     id: int
     email: str
+    username: Optional[str] = None
     full_name: str
     belt_rank: str
     stripes: int
     role: str
     is_active: bool
     created_at: datetime
+    gym: Optional[str] = None
+    favourite_sub: Optional[str] = None
+    birthday: Optional[date] = None
+    age: Optional[int] = None  # calculated from birthday
+    country: Optional[str] = None
+    avatar_url: Optional[str] = None  # add it to the API address to load the picture

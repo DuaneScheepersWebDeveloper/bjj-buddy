@@ -2,11 +2,17 @@
 
 | Endpoint | What it does |
 |---|---|
-| `POST /auth/login` `{email, password}` | Returns `{access_token, expires_at, user}` |
-| `POST /auth/register` `{full_name, email, password}` | Creates an account (password 8+ chars) and logs in |
+| `POST /auth/login` `{login, password}` | Log in with **email or username** (`login`). Returns `{access_token, expires_at, user}` |
+| `POST /auth/register` `{full_name, username, email, password}` | Creates an account (password 8+ chars) and logs in |
 | `GET /auth/me` | The logged-in user |
+| `PATCH /auth/me` `{full_name, username, email, gym, favourite_sub, birthday, country}` | Edit your own profile (send only what changes; `null` or `""` clears gym/sub/birthday/country). `age` is calculated from `birthday`. Belt, stripes, role and status are admin-only |
+| `PUT /auth/me/avatar` `{image_base64}` | Set your profile picture (JPG, PNG or WebP, max 5 MB). Returns the user with `avatar_url` |
+| `DELETE /auth/me/avatar` | Remove your profile picture |
 | `POST /auth/logout` | Ends this device's session — the token stops working immediately |
 | `POST /auth/logout-all` | Ends every session for this user |
+
+Profile pictures are saved in `Backend/uploads/avatars/` (git-ignored) and served at `/uploads/avatars/...`.
+The app adds the API address in front of `avatar_url` to load them.
 
 Send the token on every request that needs a logged-in user:
 
@@ -22,6 +28,17 @@ In Swagger (`/docs`), click **Authorize** and paste the token.
 - Users created before login existed had plain-text passwords. They can still log in,
   and their password is converted to a hash the first time they do.
 - To protect an endpoint: `user: User = Depends(get_current_user)` (from `app.security`).
+
+## Usernames
+
+Every account can have a username as a second way to sign in. Sign-up asks for one; accounts
+created before usernames existed don't have one until an admin sets it (Admin → tap the user).
+
+- 3–30 characters: letters, numbers, dots and underscores, starting with a letter or number.
+- Stored in lowercase and unique (`Duane_BJJ` and `duane_bjj` are the same).
+- Can't contain `@`. That's how the login form tells a username from an email.
+- A few names are reserved (`admin`, `support`, `root`, `bjjbuddy`, …). See `app/usernames.py`.
+- Password reset still goes by email.
 
 ## Forgot password
 
@@ -70,10 +87,19 @@ Close and reopen the app. **Admin** now appears in the menu.
 | `GET /admin/users?search=&active=&role=` | List users, optionally filtered |
 | `GET /admin/summary` | Counts: total, active, inactive, admins |
 | `GET /admin/users/{id}` | One user's details |
-| `PATCH /admin/users/{id}` `{full_name, email, belt_rank, stripes, role, is_active}` | Edit any of these (send only what changes). Belt must be White, Blue, Purple, Brown or Black; stripes 0–4 |
+| `PATCH /admin/users/{id}` `{full_name, email, username, belt_rank, stripes, role, is_active}` | Edit any of these (send only what changes). Belt must be White, Blue, Purple, Brown or Black; stripes 0–4 |
 | `PATCH /admin/users/{id}/status` `{is_active}` | Activate or deactivate a user. Deactivating logs them out everywhere immediately |
 | `PATCH /admin/users/{id}/role` `{role}` | Make someone an admin, or a normal user |
 | `GET/POST/PATCH/DELETE /users/...` | Full access to any account |
+
+### Admin tasks (shared to-do list)
+
+| Endpoint | What it does |
+|---|---|
+| `GET /admin/tasks` | All tasks: open ones (newest first), then completed |
+| `POST /admin/tasks` `{id, title, created_at?}` | Add a task. The app makes the `id` (a UUID) so tasks can be added and edited offline. Re-sending the same `id` just returns the task |
+| `PATCH /admin/tasks/{id}` `{title?, done?}` | Rename or tick off / reopen |
+| `DELETE /admin/tasks/{id}` | Delete (deleting one that's already gone still succeeds) |
 
 Admins can't deactivate, demote or delete **themselves**, so you can't lock yourself out.
 They can still edit their own name, email, belt and stripes.

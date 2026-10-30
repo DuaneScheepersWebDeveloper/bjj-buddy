@@ -19,6 +19,7 @@ from app.models.password_reset_model import PasswordResetCode
 from app.models.user_model import BELTS, MAX_STRIPES, ROLE_ADMIN, User
 from app.schemas import UserPublic
 from app.security import require_admin
+from app.usernames import clean_username, username_taken
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
 
@@ -36,6 +37,7 @@ class AdminUserUpdate(BaseModel):
 
     full_name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     email: Optional[str] = None
+    username: Optional[str] = None
     belt_rank: Optional[str] = None
     stripes: Optional[int] = Field(default=None, ge=0, le=MAX_STRIPES)
     role: Optional[Literal["user", "admin"]] = None
@@ -60,6 +62,11 @@ class AdminUserUpdate(BaseModel):
         if "@" not in v or "." not in v.split("@")[-1] or " " in v:
             raise ValueError("Enter a valid email address")
         return v
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else clean_username(v)
 
     @field_validator("belt_rank")
     @classmethod
@@ -93,7 +100,7 @@ def _end_sessions(db: Session, user_id: int) -> None:
 
 @router.get("/users", response_model=list[UserPublic])
 def list_users(
-    search: Optional[str] = Query(default=None, description="Matches name or email"),
+    search: Optional[str] = Query(default=None, description="Matches name, email or username"),
     active: Optional[bool] = Query(default=None, description="Only active (true) or inactive (false) users"),
     role: Optional[Literal["user", "admin"]] = None,
     db: Session = Depends(get_session),
@@ -101,7 +108,13 @@ def list_users(
     q = select(User)
     if search and search.strip():
         term = f"%{search.strip().lower()}%"
-        q = q.where(or_(func.lower(User.email).like(term), func.lower(User.full_name).like(term)))
+        q = q.where(
+            or_(
+                func.lower(User.email).like(term),
+                func.lower(User.full_name).like(term),
+                func.lower(User.username).like(term),
+            )
+        )
     if active is not None:
         q = q.where(User.is_active == active)
     if role:
@@ -124,7 +137,7 @@ def edit_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
-    """Edit someone's name, email, belt, stripes, role or active status.
+    """Edit someone's name, email, username, belt, stripes, role or active status.
     You can edit your own name, email and belt here, but not your own role or status."""
     user = db.get(User, user_id)
     if user is None:
@@ -143,6 +156,10 @@ def edit_user(
         ).first()
         if taken:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Another account already uses that email")
+
+    if "username" in changes and changes["username"] != user.username:
+        if username_taken(db, changes["username"], exclude_user_id=user.id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That username is taken")
 
     deactivating = changes.get("is_active") is False and user.is_active
     for key, value in changes.items():

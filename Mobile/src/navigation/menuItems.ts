@@ -1,5 +1,13 @@
 /** The sections reachable from the main (hamburger) menu. Add new ones here. */
-export type SectionId = 'logSession' | 'stats' | 'plan' | 'profile' | 'settings' | 'support' | 'admin';
+export type SectionId =
+  | 'logSession'
+  | 'stats'
+  | 'plan'
+  | 'profile'
+  | 'settings'
+  | 'support'
+  | 'admin'
+  | 'adminTasks';
 
 export type MenuItem = {
   id: SectionId;
@@ -7,7 +15,7 @@ export type MenuItem = {
   hint: string;
   /** Highlighted as the main action. */
   primary?: boolean;
-  /** Only shown to admins. */
+  /** Only shown to admins (grouped under an "Admin" heading in the menu). */
   adminOnly?: boolean;
 };
 
@@ -18,7 +26,8 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'profile', label: 'Profile', hint: 'Belt, stripes and gym' },
   { id: 'settings', label: 'Settings', hint: 'Account and app preferences' },
   { id: 'support', label: 'Support', hint: 'Help, feedback and contact' },
-  { id: 'admin', label: 'Admin', hint: 'Manage users and access', adminOnly: true },
+  { id: 'admin', label: 'Users', hint: 'Manage users and access', adminOnly: true },
+  { id: 'adminTasks', label: 'Tasks', hint: 'Ideas and to-dos for admins', adminOnly: true },
 ];
 
 /** The menu items this user is allowed to see. */

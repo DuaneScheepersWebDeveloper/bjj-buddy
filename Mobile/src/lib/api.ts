@@ -43,6 +43,8 @@ if (__DEV__) console.log(`[api] Using API at ${API_URL}`);
 export type User = {
   id: number;
   email: string;
+  /** Optional second way to sign in. Older accounts may not have one yet. */
+  username: string | null;
   full_name: string;
   belt_rank: string;
   /** Stripes on the current belt, 0-4. */
@@ -50,7 +52,27 @@ export type User = {
   role: 'user' | 'admin';
   is_active: boolean;
   created_at: string;
+  gym: string | null;
+  favourite_sub: string | null;
+  /** "YYYY-MM-DD" */
+  birthday: string | null;
+  /** Calculated by the server from the birthday. */
+  age: number | null;
+  country: string | null;
+  /** Path to the profile picture on the API (e.g. "/uploads/avatars/12-abc.jpg"), or null. */
+  avatar_url: string | null;
 };
+
+/** Fields you can change about yourself (PATCH /auth/me). */
+export type ProfileChanges = Partial<{
+  full_name: string;
+  username: string;
+  email: string;
+  gym: string | null;
+  favourite_sub: string | null;
+  birthday: string | null;
+  country: string | null;
+}>;
 
 export type AuthResponse = {
   access_token: string;
@@ -84,11 +106,27 @@ function messageFrom(body: unknown, status: number): string {
   return 'Request failed. Please try again.';
 }
 
-type Options = { method?: string; body?: unknown; token?: string | null };
+export type RequestOptions = {
+  method?: string;
+  body?: unknown;
+  /** Extra headers, e.g. Idempotency-Key for outbox retries. */
+  headers?: Record<string, string>;
+  /** Give up after this long (default 15 s). */
+  timeoutMs?: number;
+};
+type Options = RequestOptions & { token?: string | null };
 
-export async function api<T>(path: string, { method = 'GET', body, token }: Options = {}): Promise<T> {
+/** True when the request never reached the server (offline, no signal, server down). */
+export function isNetworkError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 0;
+}
+
+export async function api<T>(
+  path: string,
+  { method = 'GET', body, token, headers, timeoutMs = 15_000 }: Options = {},
+): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, {
@@ -98,6 +136,7 @@ export async function api<T>(path: string, { method = 'GET', body, token }: Opti
         Accept: 'application/json',
         ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });

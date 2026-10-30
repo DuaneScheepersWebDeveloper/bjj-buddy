@@ -23,6 +23,7 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
 
   const [fullName, setFullName] = useState(user.full_name);
   const [email, setEmail] = useState(user.email);
+  const [username, setUsername] = useState(user.username ?? '');
   const [belt, setBelt] = useState(user.belt_rank);
   const [stripes, setStripes] = useState(user.stripes ?? 0);
   const [role, setRole] = useState(user.role);
@@ -43,6 +44,8 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
   const changes: Record<string, unknown> = {};
   if (fullName.trim() !== user.full_name) changes.full_name = fullName.trim();
   if (email.trim().toLowerCase() !== user.email) changes.email = email.trim().toLowerCase();
+  const cleanUsername = username.trim().replace(/^@/, '').toLowerCase();
+  if (cleanUsername && cleanUsername !== (user.username ?? '')) changes.username = cleanUsername;
   if (belt !== user.belt_rank) changes.belt_rank = belt;
   if (stripes !== (user.stripes ?? 0)) changes.stripes = stripes;
   if (role !== user.role) changes.role = role;
@@ -53,6 +56,11 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
     if (saving || !hasChanges) return;
     if (!fullName.trim()) return setError('Enter a name');
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address');
+    if (user.username && !cleanUsername) return setError("Username can't be empty");
+    if (cleanUsername && (cleanUsername.length < 3 || cleanUsername.length > 30))
+      return setError('Username must be 3-30 characters');
+    if (cleanUsername && !/^[a-z0-9][a-z0-9._]*$/.test(cleanUsername))
+      return setError('Username can only use letters, numbers, dots and underscores');
 
     setError(null);
     setSaving(true);
@@ -78,6 +86,14 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
 
       <View style={styles.card}>
         <TextField label="Name" value={fullName} onChangeText={setFullName} autoCapitalize="words" autoCorrect={false} />
+        <TextField
+          label="Username"
+          value={username}
+          onChangeText={(t) => setUsername(t.replace(/\s/g, ''))}
+          placeholder={user.username ? undefined : 'Not set yet'}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
         <TextField
           label="Email"
           value={email}

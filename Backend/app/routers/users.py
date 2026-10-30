@@ -8,6 +8,7 @@ from app.models.password_reset_model import PasswordResetCode
 from app.models.session_model import Session as TrainingSession
 from app.schemas import UserPublic
 from app.security import get_current_user, hash_password, require_admin
+from app.usernames import clean_username, username_taken
 from pydantic import BaseModel
 from typing import Optional
 
@@ -36,6 +37,7 @@ class UserUpdate(BaseModel):
     We use Optional so the user can update just their name, or just their email,
     without having to send all the fields again."""
     email: Optional[str] = None
+    username: Optional[str] = None
     full_name: Optional[str] = None
     password: Optional[str] = None
 
@@ -119,6 +121,16 @@ def update_user(
         taken = session.exec(select(User).where(User.email == update_data["email"], User.id != user.id)).first()
         if taken:
             raise HTTPException(status_code=400, detail="Email already registered")
+
+    if update_data.get("username"):
+        try:
+            update_data["username"] = clean_username(update_data["username"])
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if username_taken(session, update_data["username"], exclude_user_id=user.id):
+            raise HTTPException(status_code=400, detail="That username is taken")
+    elif "username" in update_data:
+        update_data.pop("username")  # empty value: leave it as it was
 
     # Loop through the updated data and apply it to the user object
     for key, value in update_data.items():

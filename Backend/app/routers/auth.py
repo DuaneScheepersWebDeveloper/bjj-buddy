@@ -15,14 +15,15 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from app.avatars import decode_image, delete_avatar_file, save_avatar
 from app.config import settings
 from app.database import get_session
 from app.email_sender import send_email
@@ -30,6 +31,7 @@ from app.models.auth_token_model import AuthToken
 from app.models.password_reset_model import PasswordResetCode
 from app.models.user_model import User
 from app.schemas import UserPublic
+from app.usernames import clean_username, find_by_username, username_taken
 from app.security import (
     _as_utc,
     burn_time_verifying,
@@ -55,17 +57,22 @@ def _clean_email(value: str) -> str:
 
 
 class LoginRequest(BaseModel):
-    email: str
+    # Email address OR username. (Older app versions send this as "email".)
+    login: str = Field(min_length=1, validation_alias=AliasChoices("login", "email"))
     password: str = Field(min_length=1)
 
-    @field_validator("email")
+    @field_validator("login")
     @classmethod
-    def _email(cls, v: str) -> str:
-        return _clean_email(v)
+    def _login(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not v:
+            raise ValueError("Enter your email or username")
+        return v
 
 
 class RegisterRequest(BaseModel):
     email: str
+    username: str
     full_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=200)
 
@@ -73,6 +80,11 @@ class RegisterRequest(BaseModel):
     @classmethod
     def _email(cls, v: str) -> str:
         return _clean_email(v)
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str) -> str:
+        return clean_username(v)
 
     @field_validator("full_name")
     @classmethod
@@ -96,14 +108,20 @@ def _find_user(db: Session, email: str) -> Optional[User]:
     return db.exec(select(User).where(func.lower(User.email) == email)).first()
 
 
+def _find_by_login(db: Session, login: str) -> Optional[User]:
+    """Look a user up by email (if it has an @) or by username."""
+    return _find_user(db, login) if "@" in login else find_by_username(db, login)
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, request: Request, db: Session = Depends(get_session)):
-    user = _find_user(db, body.email)
+    wrong = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email/username or password")
+    user = _find_by_login(db, body.login)
     if user is None:
         burn_time_verifying(body.password)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+        raise wrong
     if not verify_password(body.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
+        raise wrong
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been deactivated")
 
@@ -122,7 +140,14 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_sessio
 def register(body: RegisterRequest, request: Request, db: Session = Depends(get_session)):
     if _find_user(db, body.email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="An account with this email already exists")
-    user = User(email=body.email, full_name=body.full_name, hashed_password=hash_password(body.password))
+    if username_taken(db, body.username):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That username is taken")
+    user = User(
+        email=body.email,
+        username=body.username,
+        full_name=body.full_name,
+        hashed_password=hash_password(body.password),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -132,6 +157,123 @@ def register(body: RegisterRequest, request: Request, db: Session = Depends(get_
 
 @router.get("/me", response_model=UserPublic)
 def me(user: User = Depends(get_current_user)):
+    return user
+
+
+class ProfileUpdate(BaseModel):
+    """What you can change about yourself. Send only the fields that change;
+    send an empty string ("") or null for gym / favourite sub / birthday / country to clear it.
+    Belt, stripes, role and active status are set by admins."""
+
+    full_name: Optional[str] = Field(default=None, max_length=120)
+    username: Optional[str] = None
+    email: Optional[str] = None
+    gym: Optional[str] = Field(default=None, max_length=80)
+    favourite_sub: Optional[str] = Field(default=None, max_length=60)
+    birthday: Optional[date] = None
+    country: Optional[str] = Field(default=None, max_length=60)
+
+    @field_validator("full_name")
+    @classmethod
+    def _name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Name can't be empty")
+        return v
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else clean_username(v)
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: Optional[str]) -> Optional[str]:
+        return None if v is None else _clean_email(v)
+
+    @field_validator("gym", "favourite_sub", "country")
+    @classmethod
+    def _text(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = " ".join(v.split())  # tidy spaces
+        return v or None
+
+    @field_validator("birthday", mode="before")
+    @classmethod
+    def _empty_birthday(cls, v):
+        return None if v == "" else v
+
+    @field_validator("birthday")
+    @classmethod
+    def _birthday(cls, v: Optional[date]) -> Optional[date]:
+        if v is None:
+            return v
+        today = date.today()
+        if v > today:
+            raise ValueError("Birthday can't be in the future")
+        if v.year < today.year - 110:
+            raise ValueError("Please check the birthday year")
+        return v
+
+
+class AvatarUpload(BaseModel):
+    # The picture as base64 text (what expo-image-picker gives with base64: true).
+    image_base64: str = Field(min_length=16)
+
+
+@router.put("/me/avatar", response_model=UserPublic)
+def upload_avatar(body: AvatarUpload, user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    """Set or replace your profile picture (JPG, PNG or WebP, up to 5 MB)."""
+    try:
+        data, ext = decode_image(body.image_base64)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    old = user.avatar_url
+    user.avatar_url = save_avatar(user.id, data, ext)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    delete_avatar_file(old)
+    return user
+
+
+@router.delete("/me/avatar", response_model=UserPublic)
+def remove_avatar(user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    """Remove your profile picture."""
+    old = user.avatar_url
+    user.avatar_url = None
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    delete_avatar_file(old)
+    return user
+
+
+@router.patch("/me", response_model=UserPublic)
+def update_me(body: ProfileUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_session)):
+    """Edit your own profile."""
+    changes = body.model_dump(exclude_unset=True)
+
+    # These can't be blanked out.
+    for required in ("full_name", "username", "email"):
+        if required in changes and changes[required] is None:
+            changes.pop(required)
+
+    if "email" in changes and changes["email"] != user.email:
+        if _find_user(db, changes["email"]):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Another account already uses that email")
+    if "username" in changes and changes["username"] != user.username:
+        if username_taken(db, changes["username"], exclude_user_id=user.id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="That username is taken")
+
+    for key, value in changes.items():
+        setattr(user, key, value)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 

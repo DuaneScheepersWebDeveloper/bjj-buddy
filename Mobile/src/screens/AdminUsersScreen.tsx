@@ -115,7 +115,7 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
       <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" style={styles.back}>
         <Text style={styles.backText}>‹ Home</Text>
       </Pressable>
-      <Text style={styles.title}>Admin</Text>
+      <Text style={styles.title}>Users</Text>
       <Text style={styles.hint}>Manage who can use BJJ Buddy.</Text>
 
       {summary ? (
@@ -131,7 +131,7 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Search name or email"
+          placeholder="Search name, email or username"
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.accent}
           autoCapitalize="none"
@@ -184,7 +184,9 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
                   <Text style={styles.name} numberOfLines={1}>{u.full_name}</Text>
                   {u.role === 'admin' ? <Text style={styles.adminBadge}>ADMIN</Text> : null}
                 </View>
-                <Text style={styles.email} numberOfLines={1}>{u.email}</Text>
+                <Text style={styles.email} numberOfLines={1}>
+                  {u.username ? `@${u.username} · ${u.email}` : u.email}
+                </Text>
                 <View style={styles.rankLine}>
                   <BeltBadge belt={u.belt_rank} stripes={u.stripes} size="sm" />
                   <Text style={styles.rankText} numberOfLines={1}>{formatRank(u.belt_rank, u.stripes)}</Text>
@@ -220,7 +222,7 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
       )}
 
       <Text style={styles.footnote}>
-        Tap a user to edit their name, email, belt or role. Deactivated users are logged out straight away and can't sign in until you activate them again.
+        Tap a user to edit their name, username, email, belt, stripes or role. Deactivated users are logged out straight away and can't sign in until you activate them again.
       </Text>
     </View>
   );

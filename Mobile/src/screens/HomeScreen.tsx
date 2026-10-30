@@ -3,21 +3,26 @@ import {
   Animated,
   BackHandler,
   Easing,
+  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StatusBar as RNStatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import type { ScrollView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../auth/AuthContext';
 import { BeltMark } from '../components/BeltMark';
-import { BeltBadge, formatRank } from '../components/BeltBadge';
+import { BeltBadge } from '../components/BeltBadge';
+import { Avatar } from '../components/Avatar';
 import { HamburgerButton } from '../components/HamburgerButton';
 import { MainMenu } from '../components/MainMenu';
 import { SectionPlaceholder } from './SectionPlaceholder';
+import { ProfileScreen } from './ProfileScreen';
+import { SyncStatus } from '../offline/SyncStatus';
 import { AdminUsersScreen } from './AdminUsersScreen';
+import { AdminTasksScreen } from './AdminTasksScreen';
 import type { SectionId } from '../navigation/menuItems';
 import { colors, radius, space } from '../theme';
 
@@ -27,6 +32,8 @@ const HEADER_TOP =
 const BUTTON_SIZE = 48;
 const MENU_TOP = HEADER_TOP + BUTTON_SIZE + space(2);
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+// How far you scroll (in points) before the logo has fully faded.
+const LOGO_FADE_DISTANCE = 48;
 
 export function HomeScreen() {
   const { user, signOut, refreshUser } = useAuth();
@@ -34,6 +41,31 @@ export function HomeScreen() {
 
   // --- Menu open/close animation -------------------------------------------
   const progress = useRef(new Animated.Value(0)).current;
+
+  // --- Logo fades out as you scroll, so page titles don't run into it --------
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const onScroll = Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+    useNativeDriver: USE_NATIVE_DRIVER,
+  });
+  const logoFade = {
+    opacity: scrollY.interpolate({ inputRange: [0, LOGO_FADE_DISTANCE], outputRange: [1, 0], extrapolate: 'clamp' }),
+    transform: [
+      {
+        translateY: scrollY.interpolate({
+          inputRange: [0, LOGO_FADE_DISTANCE],
+          outputRange: [0, -10],
+          extrapolate: 'clamp',
+        }),
+      },
+    ],
+  };
+
+  // Each page starts at the top, with the logo showing.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    scrollY.setValue(0);
+  }, [section, scrollY]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
 
@@ -82,37 +114,51 @@ export function HomeScreen() {
   }, [menuOpen, section, closeMenu]);
 
   // --- Content ----------------------------------------------------------------
-  const firstName = user?.full_name.split(' ')[0] ?? 'there';
   const rank = user?.belt_rank ?? 'White';
   const stripes = user?.stripes ?? 0;
 
   return (
-    <View style={styles.flex}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <StatusBar style="light" />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <Animated.ScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+      >
         <View style={styles.column}>
           {section === 'admin' && user?.role === 'admin' ? (
             <AdminUsersScreen onBack={() => setSection(null)} />
-          ) : section && section !== 'admin' ? (
+          ) : section === 'adminTasks' && user?.role === 'admin' ? (
+            <AdminTasksScreen onBack={() => setSection(null)} />
+          ) : section === 'profile' ? (
+            <ProfileScreen onBack={() => setSection(null)} />
+          ) : section && section !== 'admin' && section !== 'adminTasks' ? (
             <SectionPlaceholder section={section} onBack={() => setSection(null)} />
           ) : (
             <>
-              <Text style={styles.greeting}>Oss, {firstName}.</Text>
-              <Text style={styles.sub}>Open the menu in the top corner to get started.</Text>
-
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>Current rank</Text>
-                <View style={styles.rankRow}>
-                  <BeltBadge belt={rank} stripes={stripes} size="lg" />
+              <View style={[styles.card, styles.profileRow]}>
+                <Avatar url={user?.avatar_url} name={user?.full_name} belt={rank} size={60} />
+                <View style={styles.nameBlock}>
+                  <Text style={styles.name} numberOfLines={1}>{user?.full_name}</Text>
+                  {user?.gym ? (
+                    <Text style={styles.gym} numberOfLines={1}>
+                      {user.gym}
+                    </Text>
+                  ) : null}
                 </View>
-                <Text style={styles.rankText}>{formatRank(rank, stripes)}</Text>
-                <Text style={styles.email}>{user?.email}</Text>
+                <BeltBadge belt={rank} stripes={stripes} size="md" />
               </View>
             </>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      {/* Offline / upload status, floating at the bottom of every page. */}
+      <SyncStatus />
 
       <MainMenu
         progress={progress}
@@ -131,7 +177,9 @@ export function HomeScreen() {
       {/* Header sits on top of the menu's backdrop so the button can close it. */}
       <View style={styles.header} pointerEvents="box-none">
         <View style={styles.headerInner} pointerEvents="box-none">
-          <BeltMark size="sm" />
+          <Animated.View style={logoFade} pointerEvents="none">
+            <BeltMark size="sm" />
+          </Animated.View>
           <HamburgerButton
             progress={progress}
             open={menuOpen}
@@ -139,7 +187,7 @@ export function HomeScreen() {
           />
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -160,10 +208,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  scroll: { flexGrow: 1, paddingHorizontal: space(5), paddingTop: MENU_TOP + space(8), paddingBottom: space(10) },
+  // Extra room at the bottom so the floating upload status never covers the last item.
+  scroll: { flexGrow: 1, paddingHorizontal: space(5), paddingTop: MENU_TOP + space(8), paddingBottom: space(24) },
   column: { width: '100%', maxWidth: 420, alignSelf: 'center' },
-  greeting: { color: colors.text, fontSize: 32, fontWeight: '800' },
-  sub: { color: colors.textMuted, fontSize: 16, marginTop: space(2), marginBottom: space(8) },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -172,8 +219,8 @@ const styles = StyleSheet.create({
     padding: space(5),
     marginBottom: space(6),
   },
-  cardLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4, marginBottom: space(3) },
-  rankRow: { flexDirection: 'row', alignItems: 'center', gap: space(3) },
-  rankText: { color: colors.text, fontSize: 18, fontWeight: '700', marginTop: space(3) },
-  email: { color: colors.textMuted, fontSize: 14, marginTop: space(3) },
+  profileRow: { flexDirection: 'row', alignItems: 'center', gap: space(3) },
+  nameBlock: { flex: 1 },
+  name: { color: colors.text, fontSize: 21, fontWeight: '800' },
+  gym: { color: colors.textMuted, fontSize: 15, fontWeight: '600', marginTop: space(1) },
 });

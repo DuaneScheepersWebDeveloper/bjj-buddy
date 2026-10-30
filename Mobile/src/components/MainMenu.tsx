@@ -1,7 +1,8 @@
-import { Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { User } from '../lib/api';
 import { menuItemsFor, type SectionId } from '../navigation/menuItems';
-import { BeltBadge, formatRank } from './BeltBadge';
+import { formatRank } from './BeltBadge';
+import { Avatar } from './Avatar';
 import { colors, radius, space } from '../theme';
 
 type Props = {
@@ -20,10 +21,12 @@ type Props = {
 
 /** Dropdown panel that grows out of the top-right corner, over a dimmed backdrop. */
 export function MainMenu({ progress, mounted, top, user, active, onSelect, onSignOut, onClose }: Props) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   if (!mounted) return null;
 
   const panelWidth = Math.min(320, width - space(8));
+  // Never taller than the screen: the list scrolls inside the panel instead.
+  const panelMaxHeight = height - top - space(6);
 
   const panelAnim = {
     opacity: progress,
@@ -40,13 +43,13 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
       </Animated.View>
 
       <Animated.View
-        style={[styles.panel, { top, width: panelWidth }, panelAnim]}
+        style={[styles.panel, { top, width: panelWidth, maxHeight: panelMaxHeight }, panelAnim]}
         accessibilityViewIsModal
         accessibilityLabel="Main menu"
       >
         <View style={styles.userRow}>
           <View style={styles.userBelt}>
-            <BeltBadge belt={user?.belt_rank ?? 'White'} stripes={user?.stripes} size="sm" />
+            <Avatar url={user?.avatar_url} name={user?.full_name} belt={user?.belt_rank} size={40} />
           </View>
           <View style={styles.userText}>
             <Text style={styles.userName} numberOfLines={1}>{user?.full_name}</Text>
@@ -59,41 +62,58 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
 
         <View style={styles.divider} />
 
-        {menuItemsFor(user?.role).map((item) => {
-          const isActive = item.id === active;
-          return (
-            <Pressable
-              key={item.id}
-              onPress={() => onSelect(item.id)}
-              accessibilityRole="menuitem"
-              accessibilityState={{ selected: isActive }}
-              style={({ pressed }) => [styles.item, (pressed || isActive) && styles.itemPressed]}
-            >
-              <View style={[styles.marker, item.primary && styles.markerPrimary, isActive && styles.markerActive]} />
-              <View style={styles.itemText}>
-                <Text style={[styles.itemLabel, item.primary && styles.itemLabelPrimary]}>{item.label}</Text>
-                <Text style={styles.itemHint} numberOfLines={1}>{item.hint}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          );
-        })}
-
-        <View style={styles.divider} />
-
-        <Pressable
-          onPress={onSignOut}
-          accessibilityRole="menuitem"
-          style={({ pressed }) => [styles.item, styles.signOut, pressed && styles.itemPressed]}
+        <ScrollView
+          style={styles.scroll}
+          bounces={false}
+          showsVerticalScrollIndicator
+          persistentScrollbar
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.signOutText}>Log out</Text>
-        </Pressable>
+          {menuItemsFor(user?.role).map((item, i, all) => {
+            const isActive = item.id === active;
+            const firstAdmin = item.adminOnly && !all[i - 1]?.adminOnly;
+            return (
+              <View key={item.id}>
+                {firstAdmin ? (
+                  <View style={styles.groupHeader}>
+                    <View style={styles.divider} />
+                    <Text style={styles.groupLabel}>ADMIN</Text>
+                  </View>
+                ) : null}
+                <Pressable
+                  onPress={() => onSelect(item.id)}
+                  accessibilityRole="menuitem"
+                  accessibilityState={{ selected: isActive }}
+                  style={({ pressed }) => [styles.item, (pressed || isActive) && styles.itemPressed]}
+                >
+                  <View style={[styles.marker, item.primary && styles.markerPrimary, isActive && styles.markerActive]} />
+                  <View style={styles.itemText}>
+                    <Text style={[styles.itemLabel, item.primary && styles.itemLabelPrimary]}>{item.label}</Text>
+                    <Text style={styles.itemHint} numberOfLines={1}>{item.hint}</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+
+          <View style={styles.divider} />
+
+          <Pressable
+            onPress={onSignOut}
+            accessibilityRole="menuitem"
+            style={({ pressed }) => [styles.item, styles.signOut, pressed && styles.itemPressed]}
+          >
+            <Text style={styles.signOutText}>Log out</Text>
+          </Pressable>
+        </ScrollView>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flexGrow: 0, flexShrink: 1 },
   backdrop: { backgroundColor: 'rgba(5, 6, 8, 0.6)' },
   panel: {
     position: 'absolute',
@@ -116,6 +136,16 @@ const styles = StyleSheet.create({
   userName: { color: colors.text, fontSize: 16, fontWeight: '700' },
   userRank: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: space(1) },
+  groupHeader: { marginTop: space(1) },
+  groupLabel: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    paddingHorizontal: space(4),
+    paddingTop: space(2),
+    paddingBottom: space(1),
+  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
