@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, Text, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError, type User } from '../lib/api';
 import { Banner } from '../components/AuthLayout';
 import { TextField } from '../components/TextField';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { BeltBadge, MAX_STRIPES, formatRank } from '../components/BeltBadge';
-import { belts, colors, radius, space } from '../theme';
+import { belts, radius, space } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 const BELT_ORDER = ['White', 'Blue', 'Purple', 'Brown', 'Black'] as const;
 
@@ -18,6 +19,7 @@ type Props = {
 
 /** Admin form for editing one user's details, belt, role and status. */
 export function AdminEditUser({ user, onCancel, onSaved }: Props) {
+  const styles = useStyles();
   const { request, user: me, refreshUser } = useAuth();
   const isMe = user.id === me?.id;
 
@@ -190,6 +192,7 @@ type SegmentedProps = {
 };
 
 function Segmented({ options, value, onChange, disabled, danger }: SegmentedProps) {
+  const styles = useStyles();
   return (
     <View style={[styles.segment, disabled && styles.segmentDisabled]}>
       {options.map((o) => {
@@ -213,7 +216,7 @@ function Segmented({ options, value, onChange, disabled, danger }: SegmentedProp
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   back: { alignSelf: 'flex-start', paddingVertical: space(1), marginBottom: space(3) },
   backText: { color: colors.textMuted, fontSize: 15, fontWeight: '600' },
   title: { color: colors.text, fontSize: 30, fontWeight: '800' },
@@ -269,4 +272,4 @@ const styles = StyleSheet.create({
   noteWarn: { color: colors.danger },
   buttons: { marginTop: space(6) },
   gap: { height: space(3) },
-});
+}));

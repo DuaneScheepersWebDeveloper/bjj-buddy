@@ -1,5 +1,33 @@
 // One place for the app's colours and spacing so every screen matches.
-export const colors = {
+// There are two palettes, dark and light. Screens get the current one from
+// useTheme() / makeStyles() in ThemeContext.tsx; never import a palette directly into a screen.
+
+export type Palette = {
+  background: string;
+  surface: string;
+  surfaceRaised: string;
+  border: string;
+  borderFocus: string;
+  text: string;
+  textMuted: string;
+  accent: string;
+  accentPressed: string;
+  danger: string;
+  dangerSurface: string;
+  white: string;
+  /** Green for "done" / "active" states. */
+  success: string;
+  /** Amber for "waiting" states. */
+  warning: string;
+  /** Dims the page behind the menu and pop-ups. */
+  overlay: string;
+  /** Drop shadow strength for floating things (menu, upload status). */
+  shadowOpacity: number;
+  /** A white belt drawn on this background (the ring round a profile picture, the loader). */
+  whiteBelt: string;
+};
+
+export const darkColors: Palette = {
   background: '#0E1014',
   surface: '#171A20',
   surfaceRaised: '#1E222A',
@@ -12,6 +40,31 @@ export const colors = {
   danger: '#FF6B6B',
   dangerSurface: '#2A1517',
   white: '#FFFFFF',
+  success: '#4CC38A',
+  warning: '#E8A33D',
+  overlay: 'rgba(5, 6, 8, 0.6)',
+  shadowOpacity: 0.4,
+  whiteBelt: '#F4F2EE',
+};
+
+export const lightColors: Palette = {
+  background: '#F3F2EF',
+  surface: '#FFFFFF',
+  surfaceRaised: '#ECEBE7',
+  border: '#DAD8D2',
+  borderFocus: '#C8102E',
+  text: '#15171C',
+  textMuted: '#626977',
+  accent: '#C8102E',
+  accentPressed: '#A00D25',
+  danger: '#C62828',
+  dangerSurface: '#FCEBEB',
+  white: '#FFFFFF',
+  success: '#1F8A57',
+  warning: '#B97411',
+  overlay: 'rgba(20, 22, 28, 0.35)',
+  shadowOpacity: 0.14,
+  whiteBelt: '#D9D5CB',
 };
 
 // Belt colours, used for the logo stripe and rank badges.

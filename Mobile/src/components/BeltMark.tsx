@@ -1,8 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../theme';
+import { Text, View } from 'react-native';
+import { makeStyles } from '../ThemeContext';
 
 /** The BJJ Buddy logo: a black belt with its red rank bar and stripes, plus the wordmark. */
 export function BeltMark({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
+  const styles = useStyles();
   const lg = size === 'lg';
   return (
     <View style={styles.wrap}>
@@ -20,7 +21,7 @@ export function BeltMark({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { alignItems: 'center' },
   belt: {
     backgroundColor: '#050506',
@@ -48,4 +49,4 @@ const styles = StyleSheet.create({
   wordLg: { fontSize: 28 },
   wordSm: { fontSize: 15, letterSpacing: 2.5 },
   wordAccent: { color: colors.accent },
-});
+}));

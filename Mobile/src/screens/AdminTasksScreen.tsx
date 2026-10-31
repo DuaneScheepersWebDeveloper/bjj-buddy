@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../auth/AuthContext';
 import { useOfflineSync } from '../offline/OfflineSync';
@@ -8,7 +8,8 @@ import { isNetworkError } from '../lib/api';
 import { Banner } from '../components/AuthLayout';
 import { WeekWidget } from '../components/WeekWidget';
 import { weekCounts, weekStreak } from '../lib/week';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 type Task = {
   id: string;
@@ -23,7 +24,6 @@ type Task = {
 };
 
 const PATH = '/admin/tasks';
-const AMBER = '#E8A33D';
 const cacheKey = (userId: number) => `bjjbuddy.adminTasks.v1.${userId}`;
 const goalKey = (userId: number) => `bjjbuddy.adminTasks.weeklyGoal.${userId}`;
 const DEFAULT_GOAL = 5;
@@ -88,6 +88,8 @@ function timeAgo(iso: string): string {
 
 /** Admins' shared to-do list for ideas. Works offline: changes upload when there's signal. */
 export function AdminTasksScreen({ onBack }: { onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { user, request } = useAuth();
   const { pending, offline, queue, onUploaded } = useOfflineSync();
   const [base, setBase] = useState<Task[] | null>(null); // last known server list
@@ -369,7 +371,7 @@ export function AdminTasksScreen({ onBack }: { onBack: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   back: { alignSelf: 'flex-start', paddingVertical: space(1), marginBottom: space(3) },
   backText: { color: colors.textMuted, fontSize: 15, fontWeight: '600' },
   title: { color: colors.text, fontSize: 30, fontWeight: '800' },
@@ -436,7 +438,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.accent,
   },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: space(1), marginTop: 3 },
-  unsyncedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: AMBER },
+  unsyncedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.warning },
   meta: { color: colors.textMuted, fontSize: 12 },
   delete: { paddingHorizontal: space(2), paddingVertical: 2, borderRadius: radius.sm },
   deleteConfirm: { backgroundColor: colors.accent },
@@ -456,4 +458,4 @@ const styles = StyleSheet.create({
   emptyTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
   emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: space(2), lineHeight: 20 },
   footnote: { color: colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: space(3) },
-});
+}));

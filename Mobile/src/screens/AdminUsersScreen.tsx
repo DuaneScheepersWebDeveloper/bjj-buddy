@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError, type User } from '../lib/api';
 import { Banner } from '../components/AuthLayout';
 import { AdminEditUser } from './AdminEditUser';
 import { BeltBadge, formatRank } from '../components/BeltBadge';
 import { BeltLoader } from '../components/BeltLoader';
-import { belts, colors, radius, space } from '../theme';
+import { belts, radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 type Filter = 'all' | 'active' | 'inactive';
 type Summary = { total_users: number; active_users: number; inactive_users: number; admins: number };
@@ -19,6 +20,8 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 /** Admin-only: see every user and activate / deactivate their accounts. */
 export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { request, user: me } = useAuth();
   const [users, setUsers] = useState<User[] | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -229,6 +232,7 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
 }
 
 function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  const styles = useStyles();
   return (
     <View style={styles.stat}>
       <Text style={[styles.statValue, highlight && styles.statHighlight]}>{value}</Text>
@@ -237,7 +241,7 @@ function Stat({ label, value, highlight }: { label: string; value: number; highl
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   back: { alignSelf: 'flex-start', paddingVertical: space(1), marginBottom: space(3) },
   backText: { color: colors.textMuted, fontSize: 15, fontWeight: '600' },
   title: { color: colors.text, fontSize: 30, fontWeight: '800' },
@@ -310,7 +314,7 @@ const styles = StyleSheet.create({
   rankLine: { flexDirection: 'row', alignItems: 'center', gap: space(2), marginTop: space(2) },
   rankText: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1 },
   status: { fontSize: 12, fontWeight: '600', marginTop: space(1) },
-  statusOn: { color: '#4CC38A' },
+  statusOn: { color: colors.success },
   statusOff: { color: colors.danger },
   you: { color: colors.textMuted, fontSize: 13, fontWeight: '600', paddingHorizontal: space(3) },
   action: {
@@ -328,4 +332,4 @@ const styles = StyleSheet.create({
   actionText: { color: colors.white, fontSize: 14, fontWeight: '700' },
   actionTextOff: { color: colors.text },
   footnote: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: space(4) },
-});
+}));

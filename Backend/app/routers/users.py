@@ -5,7 +5,7 @@ from app.database import get_session
 from app.models.user_model import User
 from app.models.auth_token_model import AuthToken
 from app.models.password_reset_model import PasswordResetCode
-from app.models.session_model import Session as TrainingSession
+from app.models.training_model import TrainingSession
 from app.schemas import UserPublic
 from app.security import get_current_user, hash_password, require_admin
 from app.usernames import clean_username, username_taken

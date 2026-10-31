@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     email_from: Optional[str] = None
 
+    # --- Voice notes (record what went right / wrong, get clear text back) ---
+    # Get a key at https://platform.openai.com/api-keys. Leave unset to turn voice notes off.
+    openai_api_key: Optional[str] = None
+    # Longest recording allowed, in seconds (up to 600 = 10 minutes).
+    voice_max_seconds: int = 300
+    # Speech-to-text model, and the model that tidies the text up. Change these if OpenAI renames them.
+    voice_transcribe_model: str = "gpt-4o-mini-transcribe"
+    voice_tidy_model: str = "gpt-6-luna"
+
     class Config:
         env_file = ".env"
 

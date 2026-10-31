@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../lib/api';
 import { AuthLayout, Banner } from '../components/AuthLayout';
 import { TextField } from '../components/TextField';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { colors, space } from '../theme';
+import { space } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 const RESEND_SECONDS = 60;
 
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function ForgotPasswordScreen({ initialEmail, onBack }: Props) {
+  const styles = useStyles();
   const { requestPasswordReset, resetPassword } = useAuth();
   const [step, setStep] = useState<'request' | 'reset'>('request');
   const [email, setEmail] = useState(initialEmail);
@@ -191,7 +193,7 @@ export function ForgotPasswordScreen({ initialEmail, onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   submitWrap: { marginTop: space(2) },
   codeInput: { fontSize: 22, letterSpacing: 8, fontWeight: '700' },
   showBtn: { paddingHorizontal: space(4), paddingVertical: space(3) },
@@ -202,4 +204,4 @@ const styles = StyleSheet.create({
   footerLink: { alignSelf: 'center', marginTop: space(6), paddingVertical: space(2) },
   footerText: { color: colors.textMuted, fontSize: 15 },
   footerStrong: { color: colors.text, fontWeight: '700' },
-});
+}));

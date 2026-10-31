@@ -24,7 +24,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'stats', label: 'Stats', hint: 'Mat time, streaks and trends' },
   { id: 'plan', label: 'Your BJJ plan', hint: 'Goals and what to work on next' },
   { id: 'profile', label: 'Profile', hint: 'Belt, stripes and gym' },
-  { id: 'settings', label: 'Settings', hint: 'Account and app preferences' },
+  { id: 'settings', label: 'Settings', hint: 'Light or dark mode and app preferences' },
   { id: 'support', label: 'Support', hint: 'Help, feedback and contact' },
   { id: 'admin', label: 'Users', hint: 'Manage users and access', adminOnly: true },
   { id: 'adminTasks', label: 'Tasks', hint: 'Ideas and to-dos for admins', adminOnly: true },

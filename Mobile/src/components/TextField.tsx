@@ -1,6 +1,7 @@
 import { forwardRef, useState, type ReactNode } from 'react';
-import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
-import { colors, radius, space } from '../theme';
+import { Text, TextInput, View, type TextInputProps } from 'react-native';
+import { radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 type Props = TextInputProps & {
   label: string;
@@ -9,6 +10,8 @@ type Props = TextInputProps & {
 };
 
 export const TextField = forwardRef<TextInput, Props>(function TextField({ label, right, style, ...rest }, ref) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.wrap}>
@@ -35,7 +38,7 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { marginBottom: space(4) },
   label: {
     color: colors.textMuted,
@@ -61,4 +64,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: space(4),
     paddingVertical: space(3),
   },
-});
+}));

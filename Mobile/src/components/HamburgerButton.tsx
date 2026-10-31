@@ -1,5 +1,6 @@
-import { Animated, Pressable, StyleSheet } from 'react-native';
-import { colors, radius } from '../theme';
+import { Animated, Pressable } from 'react-native';
+import { radius } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 type Props = {
   /** 0 = closed (three bars), 1 = open (an X). Driven by the menu's animation. */
@@ -12,6 +13,7 @@ const BAR_GAP = 6;
 
 /** Three-bar menu button that morphs into an X when the menu is open. */
 export function HamburgerButton({ progress, open, onPress }: Props) {
+  const styles = useStyles();
   const topBar = {
     transform: [
       { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_GAP + 2] }) },
@@ -45,7 +47,7 @@ export function HamburgerButton({ progress, open, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   button: {
     width: 48,
     height: 48,
@@ -60,4 +62,4 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.7 },
   bar: { width: 22, height: 2, borderRadius: 1, backgroundColor: colors.text },
   gap: { marginTop: BAR_GAP },
-});
+}));

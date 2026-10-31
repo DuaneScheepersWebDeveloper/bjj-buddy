@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Text, View } from 'react-native';
 import { API_URL } from '../lib/api';
-import { belts, colors } from '../theme';
+import { belts } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 type Props = {
   /** The user's avatar_url from the API (e.g. "/uploads/avatars/12-abc.jpg"), or null. */
@@ -31,11 +32,14 @@ function initials(name: string | undefined): string {
  * Shows their initials when there's no picture (or it fails to load).
  */
 export function Avatar({ url, name, belt = 'White', size = 56 }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [failed, setFailed] = useState(false);
   const uri = failed ? null : avatarUri(url);
 
-  // Black belts get the red of their rank bar so the ring still shows on the dark theme.
-  const ring = belt === 'Black' ? colors.accent : belts[belt] ?? belts.White;
+  // Black belts get the red of their rank bar so the ring still shows on the dark theme;
+  // white belts get a slightly deeper white so the ring shows on the light theme.
+  const ring = belt === 'Black' ? colors.accent : belt === 'White' || !belts[belt] ? colors.whiteBelt : belts[belt];
   const ringWidth = Math.max(2, Math.round(size * 0.045));
   const gap = Math.max(2, Math.round(size * 0.04));
   const inner = size - 2 * (ringWidth + gap);
@@ -73,7 +77,7 @@ export function Avatar({ url, name, belt = 'White', size = 56 }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   ring: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -83,4 +87,4 @@ const styles = StyleSheet.create({
   },
   fallback: { backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
   initials: { color: colors.text, fontWeight: '800', letterSpacing: 0.5 },
-});
+}));

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { installGlobalErrorHandler } from './src/lib/errorReporter';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { OfflineSyncProvider } from './src/offline/OfflineSync';
+import { SessionsProvider } from './src/sessions/SessionsContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BeltLoader } from './src/components/BeltLoader';
 import { BeltMark } from './src/components/BeltMark';
-import { colors } from './src/theme';
+import { makeStyles, ThemedStatusBar, ThemeProvider } from './src/ThemeContext';
 
 // Report any uncaught JS error to the API's error_log table.
 installGlobalErrorHandler();
@@ -19,6 +19,7 @@ installGlobalErrorHandler();
 const MIN_SPLASH_MS = 1600;
 
 function Root() {
+  const styles = useStyles();
   const { status } = useAuth();
   const [minTimePassed, setMinTimePassed] = useState(MIN_SPLASH_MS === 0);
 
@@ -31,7 +32,7 @@ function Root() {
   if (status === 'loading' || !minTimePassed) {
     return (
       <View style={styles.splash}>
-        <StatusBar style="light" />
+        <ThemedStatusBar />
         <View style={styles.logo}>
           <BeltMark />
         </View>
@@ -45,16 +46,20 @@ function Root() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <OfflineSyncProvider>
-          <Root />
-        </OfflineSyncProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <OfflineSyncProvider>
+            <SessionsProvider>
+              <Root />
+            </SessionsProvider>
+          </OfflineSyncProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   splash: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
   logo: { marginBottom: 48 },
-});
+}));

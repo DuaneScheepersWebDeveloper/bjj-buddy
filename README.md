@@ -2,7 +2,7 @@
 
 A training tracker for Brazilian Jiu-Jitsu. Log your sessions, follow your belt progress, and see how your training adds up.
 
-> **Status:** early development. Login, sign-up, log out, password reset and admin user management work. The home screen has a main menu; most sections are placeholders for now.
+> **Status:** early development. Login, accounts, profiles, admin tools and **logging training sessions** work. Stats, Your BJJ plan and Support are placeholders for now.
 
 ## What's in here
 
@@ -114,11 +114,12 @@ Backend/
 │   ├── avatars.py           Profile picture checks and file storage
 │   ├── idempotency.py       Makes outbox retries safe (no duplicates)
 │   ├── make_admin.py        Command to make a user an admin
+│   ├── techniques_seed.py   Built-in BJJ technique library
 │   ├── usernames.py         Username rules (format, reserved names, uniqueness)
 │   ├── schemas.py           Shapes of data the API returns
 │   ├── error_logging.py     Error capture into the error_log table
 │   ├── error_middleware.py
-│   ├── models/              Database tables (user, session, auth_token, password_reset_code, error_log)
+│   ├── models/              Database tables (user, training_session, session_entry, technique, auth_token, ...)
 │   └── routers/             Endpoints: auth, admin, admin_tasks, users, sessions, errors
 ├── sql/error_queries.sql    Handy queries for reading error logs
 ├── uploads/                 Profile pictures (created automatically, not in git)
@@ -130,15 +131,64 @@ Mobile/
 ├── App.tsx                  Entry: shows login or home depending on login state
 ├── src/
 │   ├── auth/AuthContext.tsx Login state and sign in / out / reset actions
-│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, ProfileScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
+│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, LogSessionScreen, ProfileScreen, SettingsScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
 │   ├── components/          Avatar, WeekWidget, AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
 │   ├── navigation/          menuItems.ts: the sections in the main menu
+│   ├── sessions/            Training sessions: types and SessionsContext (offline-first store)
 │   ├── offline/             Offline outbox: save changes without signal, upload later
-│   ├── data/                countries.ts: country list for the profile
+│   ├── data/                countries.ts (profile), techniques.ts (offline copy of the technique library)
 │   ├── lib/                 api.ts (talks to the backend), week.ts (weekly counts/streaks), tokenStorage.ts, errorReporter.ts
-│   └── theme.ts             Colours, belt colours, spacing
+│   ├── theme.ts             Light and dark colour palettes, belt colours, spacing
+│   └── ThemeContext.tsx     Light/dark mode: ThemeProvider, useTheme(), makeStyles()
 └── AGENTS.md                Notes for AI coding assistants working on the app
 ```
+
+## Logging a session
+
+Tap **Log a session** on the home page (or in the menu). It's four short pages:
+
+1. **Details**: when (**Today**, or **Pick a day** for a calendar; days you've already logged have a dot), where (your recent places are one tap away), how long, Gi or No-Gi, and class / open mat / private / competition.
+2. **What went right**: notes first, then the **subs you got** (with a counter) and other techniques that worked.
+3. **What went wrong**: notes, **what you got submitted with**, and what you'll work on.
+4. **Review**: your score for the day (subs vs taps). Tap **Edit** on any part, then save.
+
+- Pick techniques by searching, or filter by **position** (standing / top / bottom) and **type** (submission, pass, sweep, escape, takedown, position). Tap again or use **+ / −** to count repeats. Anything not in the list can be added by name.
+- Unfinished logs are kept on the phone, so closing the app mid-log doesn't lose anything.
+- Saving works **offline** and uploads later.
+- The home page shows your **training week** (weekly goal and streak). **Tap a day with a session** to see that day's sessions, and use **‹ ›** to look at earlier weeks. Tap a session to see, edit or delete it.
+
+**Technique library:** the built-in list lives in `Backend/app/techniques_seed.py` and is added to the `technique` table when the API starts. Add a line there to add a technique. Techniques users type in themselves are saved to their account only. The app keeps a copy (`Mobile/src/data/techniques.ts`) for the first time it's used offline, so keep the two in step.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /sessions` | Your sessions, newest first, with techniques and the subs tally |
+| `PUT /sessions/{id}` | Log or edit a session (the app makes the id, so offline retries never double up) |
+| `DELETE /sessions/{id}` | Delete one of your sessions |
+| `GET /techniques` | The technique library plus your own techniques |
+
+## Light and dark mode
+
+**Menu → Settings → Appearance** has three choices: **Light**, **Dark** (the default) and **System**, which
+follows the phone's own setting and switches automatically. The choice is saved on the device
+(AsyncStorage), so it also applies to the login screen and works offline.
+
+When building a screen, don't hard-code colours. Take them from the current theme:
+
+```tsx
+import { makeStyles, useTheme } from '../ThemeContext';
+
+function MyScreen() {
+  const styles = useStyles();        // styles for the current theme
+  const { colors } = useTheme();     // only if you need a colour in the JSX itself
+  return <Text style={styles.title}>Hi</Text>;
+}
+
+const useStyles = makeStyles((colors) => ({
+  title: { color: colors.text, fontSize: 20 },
+}));
+```
+
+New colours go in **both** palettes in `src/theme.ts` (`darkColors` and `lightColors`).
 
 ## Working offline
 
@@ -147,7 +197,7 @@ The app keeps working without signal (e.g. at the gym):
 - **Opening the app**: your profile is remembered on the phone, so it opens straight to the home screen.
 - **Saving changes**: anything sent with `sendOrQueue()` (from `src/offline/OfflineSync.tsx`) is tried
   straight away. If the phone is offline, it's saved in an **outbox** on the phone (AsyncStorage) instead.
-  Right now profile edits and the admin **Tasks** list use it; Log a session will too.
+  Profile edits, logged sessions and the admin **Tasks** list use it.
 - **Uploading later**: the outbox uploads automatically, in order, when the app opens, comes back to the
   foreground, or every 20 seconds while something is waiting. There's also an **Upload now** button.
 - **No duplicates**: each queued change has a random ID sent as the `Idempotency-Key` header. If a retry
@@ -190,10 +240,12 @@ Include the date/time the user did the thing in the body (not when it uploads), 
 
 ## Roadmap
 
-- [ ] Decide on and build the home screen
-- [ ] Log training sessions from the app
+- [x] Home screen: weekly training widget (tap a day to see its sessions)
+- [x] Log training sessions from the app (works offline)
+- [ ] Stats page (sub tally: subs vs taps per week, techniques over time, Gi vs No-Gi, most common subs)
+- [ ] Voice notes (parked): code is in `Mobile/src/components/VoiceNote.tsx`, `Backend/app/voice.py` and `Backend/app/routers/voice.py`, switched off. Decide on paid (OpenAI) vs free (Whisper on the PC) first
 - [x] Lock `/users` endpoints to the logged-in user / admins
-- [ ] Lock `/sessions` endpoints to the logged-in user
+- [x] Lock `/sessions` endpoints to the logged-in user
 - [ ] Belt and stripe progress tracking
 - [ ] Real email sending for password reset
 - [ ] Alembic database migrations

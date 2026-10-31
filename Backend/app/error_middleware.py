@@ -35,6 +35,8 @@ from app.error_logging import (
 
 log = logging.getLogger("error_logging.fallback")
 MAX_BODY_BYTES = 16 * 1024
+# Never copy these request bodies into the error log (voice recordings, photos).
+NO_BODY_PATHS = ("/voice", "/auth/me/avatar")
 
 
 def _parse_body(raw: bytes) -> Any:
@@ -103,9 +105,11 @@ class ErrorLoggingMiddleware:
             "user_agent": request.headers.get("user-agent"),
         })
 
+        keep_body = not request.url.path.startswith(NO_BODY_PATHS)
+
         async def receive_wrapper() -> Message:
             message = await receive()
-            if message["type"] == "http.request" and len(body) < MAX_BODY_BYTES:
+            if message["type"] == "http.request" and keep_body and len(body) < MAX_BODY_BYTES:
                 body.extend(message.get("body", b"")[: MAX_BODY_BYTES - len(body)])
             return message
 

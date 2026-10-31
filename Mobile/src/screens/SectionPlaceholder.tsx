@@ -1,10 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { menuItem, type SectionId } from '../navigation/menuItems';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 /** Stand-in for menu sections that haven't been built yet. Replace one at a time. */
 export function SectionPlaceholder({ section, onBack }: { section: SectionId; onBack: () => void }) {
+  const styles = useStyles();
   const item = menuItem(section);
   return (
     <View>
@@ -21,7 +23,7 @@ export function SectionPlaceholder({ section, onBack }: { section: SectionId; on
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   title: { color: colors.text, fontSize: 30, fontWeight: '800' },
   hint: { color: colors.textMuted, fontSize: 16, marginTop: space(2), marginBottom: space(8) },
   card: {
@@ -36,4 +38,4 @@ const styles = StyleSheet.create({
   },
   badge: { color: colors.accent, fontSize: 12, fontWeight: '800', letterSpacing: 1.5, marginBottom: space(2) },
   body: { color: colors.textMuted, fontSize: 15, textAlign: 'center' },
-});
+}));

@@ -1,5 +1,6 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radius } from '../theme';
+import { ActivityIndicator, Pressable, Text } from 'react-native';
+import { radius } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 type Props = {
   title: string;
@@ -10,6 +11,8 @@ type Props = {
 };
 
 export function PrimaryButton({ title, onPress, loading, disabled, variant = 'solid' }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const outline = variant === 'outline';
   const inactive = disabled || loading;
   return (
@@ -34,7 +37,7 @@ export function PrimaryButton({ title, onPress, loading, disabled, variant = 'so
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   base: {
     minHeight: 54,
     borderRadius: radius.md,
@@ -49,4 +52,4 @@ const styles = StyleSheet.create({
   inactive: { opacity: 0.6 },
   text: { color: colors.white, fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   outlineText: { color: colors.text },
-});
+}));

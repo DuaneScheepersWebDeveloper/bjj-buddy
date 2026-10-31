@@ -6,12 +6,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar as RNStatusBar,
-  StyleSheet,
   Text,
   View,
 } from 'react-native';
 import type { ScrollView } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../auth/AuthContext';
 import { BeltMark } from '../components/BeltMark';
 import { BeltBadge } from '../components/BeltBadge';
@@ -20,11 +18,15 @@ import { HamburgerButton } from '../components/HamburgerButton';
 import { MainMenu } from '../components/MainMenu';
 import { SectionPlaceholder } from './SectionPlaceholder';
 import { ProfileScreen } from './ProfileScreen';
+import { SettingsScreen } from './SettingsScreen';
+import { LogSessionScreen } from './LogSessionScreen';
+import { SessionsHome } from '../components/SessionsHome';
 import { SyncStatus } from '../offline/SyncStatus';
 import { AdminUsersScreen } from './AdminUsersScreen';
 import { AdminTasksScreen } from './AdminTasksScreen';
 import type { SectionId } from '../navigation/menuItems';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles, ThemedStatusBar } from '../ThemeContext';
 
 // Space above the header so it clears the status bar / notch.
 const HEADER_TOP =
@@ -36,8 +38,21 @@ const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const LOGO_FADE_DISTANCE = 48;
 
 export function HomeScreen() {
+  const styles = useStyles();
   const { user, signOut, refreshUser } = useAuth();
   const [section, setSection] = useState<SectionId | null>(null);
+  // Which session Log a session should open for editing (null = log a new one).
+  const [editSessionId, setEditSessionId] = useState<string | null>(null);
+  // A page can take over the Android back button (e.g. Log a session steps back a page).
+  const sectionBack = useRef<(() => boolean) | null>(null);
+  const setSectionBack = useCallback((fn: (() => boolean) | null) => {
+    sectionBack.current = fn;
+  }, []);
+  const scrollToTop = useCallback(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), []);
+  const openLog = useCallback((id: string | null) => {
+    setEditSessionId(id);
+    setSection('logSession');
+  }, []);
 
   // --- Menu open/close animation -------------------------------------------
   const progress = useRef(new Animated.Value(0)).current;
@@ -104,6 +119,7 @@ export function HomeScreen() {
         closeMenu();
         return true;
       }
+      if (sectionBack.current?.()) return true;
       if (section) {
         setSection(null);
         return true;
@@ -119,7 +135,7 @@ export function HomeScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
-      <StatusBar style="light" />
+      <ThemedStatusBar />
 
       <Animated.ScrollView
         ref={scrollRef}
@@ -136,6 +152,16 @@ export function HomeScreen() {
             <AdminTasksScreen onBack={() => setSection(null)} />
           ) : section === 'profile' ? (
             <ProfileScreen onBack={() => setSection(null)} />
+          ) : section === 'settings' ? (
+            <SettingsScreen onBack={() => setSection(null)} />
+          ) : section === 'logSession' ? (
+            <LogSessionScreen
+              key={editSessionId ?? 'new'}
+              editId={editSessionId}
+              onDone={() => setSection(null)}
+              scrollToTop={scrollToTop}
+              setBackHandler={setSectionBack}
+            />
           ) : section && section !== 'admin' && section !== 'adminTasks' ? (
             <SectionPlaceholder section={section} onBack={() => setSection(null)} />
           ) : (
@@ -152,6 +178,8 @@ export function HomeScreen() {
                 </View>
                 <BeltBadge belt={rank} stripes={stripes} size="md" />
               </View>
+
+              <SessionsHome onLog={() => openLog(null)} onOpen={(id) => openLog(id)} />
             </>
           )}
         </View>
@@ -168,6 +196,7 @@ export function HomeScreen() {
         active={section}
         onClose={() => closeMenu()}
         onSelect={(id) => {
+          if (id === 'logSession') setEditSessionId(null);
           setSection(id);
           closeMenu();
         }}
@@ -191,7 +220,7 @@ export function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1, backgroundColor: colors.background },
   header: {
     position: 'absolute',
@@ -223,4 +252,4 @@ const styles = StyleSheet.create({
   nameBlock: { flex: 1 },
   name: { color: colors.text, fontSize: 21, fontWeight: '800' },
   gym: { color: colors.textMuted, fontSize: 15, fontWeight: '600', marginTop: space(1) },
-});
+}));

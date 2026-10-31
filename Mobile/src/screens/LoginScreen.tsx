@@ -1,16 +1,18 @@
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError } from '../lib/api';
 import { AuthLayout, Banner } from '../components/AuthLayout';
 import { TextField } from '../components/TextField';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ForgotPasswordScreen } from './ForgotPasswordScreen';
-import { colors, space } from '../theme';
+import { space } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 type Mode = 'signIn' | 'signUp' | 'forgot';
 
 export function LoginScreen() {
+  const styles = useStyles();
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<Mode>('signIn');
   const [fullName, setFullName] = useState('');
@@ -192,7 +194,7 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   showBtn: { paddingHorizontal: space(4), paddingVertical: space(3) },
   showText: { color: colors.textMuted, fontSize: 14, fontWeight: '700' },
   forgot: { alignSelf: 'flex-end', marginTop: -space(2), marginBottom: space(4), paddingVertical: space(1) },
@@ -201,4 +203,4 @@ const styles = StyleSheet.create({
   switch: { alignSelf: 'center', marginTop: space(6), paddingVertical: space(2) },
   switchText: { color: colors.textMuted, fontSize: 15 },
   switchLink: { color: colors.text, fontWeight: '700' },
-});
+}));

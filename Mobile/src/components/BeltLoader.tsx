@@ -1,28 +1,30 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, Platform, View } from 'react-native';
-import { belts, colors } from '../theme';
+import { belts, type Palette } from '../theme';
+import { useTheme } from '../ThemeContext';
 
 const ORDER = ['White', 'Blue', 'Purple', 'Brown', 'Black'] as const;
 const STEP_MS = 650; // time spent on each belt colour (hold + blend)
 const SPIN_MS = 1200; // one full turn
 const USE_NATIVE = Platform.OS !== 'web';
 
-// Belt fabric colours. The black is lifted slightly so it reads on the dark background.
-const FABRIC: Record<(typeof ORDER)[number], string> = {
-  White: belts.White,
+// Belt fabric colours. The black is lifted slightly so it reads on the dark background,
+// and the white is deepened a touch on the light background.
+const fabricColours = (colors: Palette): Record<(typeof ORDER)[number], string> => ({
+  White: colors.whiteBelt,
   Blue: belts.Blue,
   Purple: belts.Purple,
   Brown: belts.Brown,
   Black: '#24262C',
-};
+});
 // Rank bar: black on coloured belts, red on a black belt.
-const BAR: Record<(typeof ORDER)[number], string> = {
+const barColours = (colors: Palette): Record<(typeof ORDER)[number], string> => ({
   White: '#0B0B0D',
   Blue: '#0B0B0D',
   Purple: '#0B0B0D',
   Brown: '#0B0B0D',
   Black: colors.accent,
-};
+});
 
 // Colour timeline: hold each belt for most of its step, then blend into the next,
 // ending on white again so the loop is seamless.
@@ -37,13 +39,14 @@ function timeline(palette: Record<(typeof ORDER)[number], string>) {
   outputRange.push(palette.White);
   return { inputRange, outputRange };
 }
-const FABRIC_TL = timeline(FABRIC);
-const BAR_TL = timeline(BAR);
 
 type Props = { size?: number };
 
 /** Loading indicator: a belt spinning in a circle, ranking up from white to black. */
 export function BeltLoader({ size = 120 }: Props) {
+  const { colors } = useTheme();
+  const FABRIC_TL = useMemo(() => timeline(fabricColours(colors)), [colors]);
+  const BAR_TL = useMemo(() => timeline(barColours(colors)), [colors]);
   const spin = useRef(new Animated.Value(0)).current;
   const rank = useRef(new Animated.Value(0)).current;
 

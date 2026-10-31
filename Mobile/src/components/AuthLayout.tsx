@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { BeltMark } from './BeltMark';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
-import { belts, colors, radius, space } from '../theme';
+import { belts, radius, space } from '../theme';
+import { makeStyles, ThemedStatusBar, useTheme } from '../ThemeContext';
 
 type Props = {
   title: string;
@@ -22,6 +22,8 @@ type Props = {
  * logo collapses, so the field being typed in stays visible.
  */
 export function AuthLayout({ title, subtitle, banner, children, footer }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const keyboardOpen = useKeyboardVisible();
 
   return (
@@ -31,7 +33,7 @@ export function AuthLayout({ title, subtitle, banner, children, footer }: Props)
       // keyboard by itself; 'padding' does that job on both platforms.
       behavior={Platform.OS === 'web' ? undefined : 'padding'}
     >
-      <StatusBar style="light" />
+      <ThemedStatusBar />
       <ScrollView
         contentContainerStyle={[styles.scroll, keyboardOpen && styles.scrollKeyboard]}
         keyboardShouldPersistTaps="handled"
@@ -55,8 +57,8 @@ export function AuthLayout({ title, subtitle, banner, children, footer }: Props)
 
           {keyboardOpen ? null : (
             <View style={styles.beltRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              {Object.values(belts).map((c) => (
-                <View key={c} style={[styles.beltDot, { backgroundColor: c }]} />
+              {Object.entries(belts).map(([name, c]) => (
+                <View key={name} style={[styles.beltDot, { backgroundColor: name === 'White' ? colors.whiteBelt : c }]} />
               ))}
             </View>
           )}
@@ -68,6 +70,7 @@ export function AuthLayout({ title, subtitle, banner, children, footer }: Props)
 
 /** Red (error) or neutral (info) message box for the top of a form. */
 export function Banner({ kind, message }: { kind: 'error' | 'info'; message: string }) {
+  const styles = useStyles();
   const error = kind === 'error';
   return (
     <View
@@ -80,7 +83,7 @@ export function Banner({ kind, message }: { kind: 'error' | 'info'; message: str
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1, backgroundColor: colors.background },
   scroll: {
     flexGrow: 1,
@@ -118,4 +121,4 @@ const styles = StyleSheet.create({
   bannerTextInfo: { color: colors.text },
   beltRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: space(8) },
   beltDot: { width: 22, height: 6, borderRadius: 3, borderWidth: 1, borderColor: colors.border },
-});
+}));

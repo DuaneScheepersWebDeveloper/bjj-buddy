@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../auth/AuthContext';
 import { ApiError, isNetworkError, type ProfileChanges, type User } from '../lib/api';
@@ -10,7 +10,8 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { BeltBadge, formatRank } from '../components/BeltBadge';
 import { Avatar } from '../components/Avatar';
 import { searchCountries } from '../data/countries';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -37,6 +38,8 @@ function formatBirthday(iso: string | null): string | null {
 
 /** Your own profile: view it, and tap Edit to change it. */
 export function ProfileScreen({ onBack }: { onBack: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { user, uploadAvatar, removeAvatar } = useAuth();
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -201,6 +204,7 @@ function PhotoOption({
   muted?: boolean;
   last?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       onPress={onPress}
@@ -224,6 +228,7 @@ function ageFrom(iso: string | null): number | null {
 }
 
 function EditProfile({ user, onCancel, onSaved }: EditProps) {
+  const styles = useStyles();
   const { updateProfile, replaceUser } = useAuth();
   const { sendOrQueue } = useOfflineSync();
   const [fullName, setFullName] = useState(user.full_name);
@@ -454,6 +459,8 @@ function EditProfile({ user, onCancel, onSaved }: EditProps) {
 
 type DateBoxProps = { value: string; onChangeText: (t: string) => void; placeholder: string; wide?: boolean };
 const DateBox = forwardRef<TextInput, DateBoxProps>(function DateBox({ value, onChangeText, placeholder, wide }, ref) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [focused, setFocused] = useState(false);
   return (
     <TextInput
@@ -473,7 +480,7 @@ const DateBox = forwardRef<TextInput, DateBoxProps>(function DateBox({ value, on
   );
 });
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   flex: { flex: 1 },
   back: { alignSelf: 'flex-start', paddingVertical: space(1), marginBottom: space(3) },
   backText: { color: colors.textMuted, fontSize: 15, fontWeight: '600' },
@@ -568,4 +575,4 @@ const styles = StyleSheet.create({
   suggestionText: { color: colors.text, fontSize: 15 },
   footnote: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: space(4) },
   gap: { height: space(3) },
-});
+}));

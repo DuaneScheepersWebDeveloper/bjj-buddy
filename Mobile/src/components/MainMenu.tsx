@@ -3,7 +3,8 @@ import type { User } from '../lib/api';
 import { menuItemsFor, type SectionId } from '../navigation/menuItems';
 import { formatRank } from './BeltBadge';
 import { Avatar } from './Avatar';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles } from '../ThemeContext';
 
 type Props = {
   /** 0 = hidden, 1 = fully open. Owned by the screen so the button and menu animate together. */
@@ -21,6 +22,7 @@ type Props = {
 
 /** Dropdown panel that grows out of the top-right corner, over a dimmed backdrop. */
 export function MainMenu({ progress, mounted, top, user, active, onSelect, onSignOut, onClose }: Props) {
+  const styles = useStyles();
   const { width, height } = useWindowDimensions();
   if (!mounted) return null;
 
@@ -112,9 +114,9 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   scroll: { flexGrow: 0, flexShrink: 1 },
-  backdrop: { backgroundColor: 'rgba(5, 6, 8, 0.6)' },
+  backdrop: { backgroundColor: colors.overlay },
   panel: {
     position: 'absolute',
     right: space(5),
@@ -125,7 +127,7 @@ const styles = StyleSheet.create({
     paddingVertical: space(2),
     transformOrigin: 'top right',
     shadowColor: '#000',
-    shadowOpacity: 0.45,
+    shadowOpacity: colors.shadowOpacity,
     shadowRadius: 24,
     shadowOffset: { width: 0, height: 12 },
     elevation: 12,
@@ -164,4 +166,4 @@ const styles = StyleSheet.create({
   chevron: { color: colors.textMuted, fontSize: 22, marginLeft: space(2) },
   signOut: { minHeight: 48 },
   signOutText: { color: colors.danger, fontSize: 15, fontWeight: '600', paddingLeft: space(1) },
-});
+}));

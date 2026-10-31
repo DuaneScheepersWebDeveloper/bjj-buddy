@@ -1,5 +1,6 @@
-import { StyleSheet, View } from 'react-native';
-import { belts, colors } from '../theme';
+import { View } from 'react-native';
+import { belts } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 export const MAX_STRIPES = 4;
 
@@ -18,6 +19,8 @@ type Props = { belt: string; stripes?: number; size?: Size };
  * carrying one white stripe per stripe earned. Black belts have a red rank bar.
  */
 export function BeltBadge({ belt, stripes = 0, size = 'md' }: Props) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const d = DIMENSIONS[size];
   const count = Math.max(0, Math.min(MAX_STRIPES, Math.round(stripes)));
   const barColor = belt === 'Black' ? colors.accent : '#0B0B0D';
@@ -47,7 +50,7 @@ export function formatRank(belt: string | undefined, stripes: number | undefined
   return s > 0 ? `${b} · ${s} stripe${s === 1 ? '' : 's'}` : b;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   belt: {
     borderRadius: 3,
     borderWidth: 1,
@@ -59,4 +62,4 @@ const styles = StyleSheet.create({
   },
   bar: { flexDirection: 'row', justifyContent: 'center', alignItems: 'stretch' },
   stripe: { backgroundColor: '#FFFFFF' },
-});
+}));

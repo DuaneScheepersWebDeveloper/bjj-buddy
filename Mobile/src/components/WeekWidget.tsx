@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { dayIndex } from '../lib/week';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
 const LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -21,6 +22,16 @@ type Props = {
   /** Colour for days with activity. Defaults to the app's red. */
   accent?: string;
   maxGoal?: number;
+  /** Which day is today (0 = Mon). Defaults to today; pass 7 for a past week, -1 for a future one. */
+  todayIndex?: number;
+  /** Day-of-month numbers shown under the letters (e.g. [27, 28, ...]). */
+  dayNumbers?: number[];
+  /** Makes days tappable (every day up to today; future days aren't). */
+  onDayPress?: (day: number) => void;
+  /** The tapped day, shown with a ring. */
+  selectedDay?: number | null;
+  /** Replaces the streak / "more to reach" line (e.g. for a past week). */
+  summary?: string;
 };
 
 const plural = (n: number, unit: string) => `${unit}${n === 1 ? '' : 's'}`;
@@ -36,10 +47,18 @@ export function WeekWidget({
   streak = 0,
   onChangeGoal,
   title = 'This week',
-  accent = colors.accent,
+  accent: accentProp,
   maxGoal = 30,
+  todayIndex,
+  dayNumbers,
+  onDayPress,
+  selectedDay = null,
+  summary,
 }: Props) {
-  const today = dayIndex(new Date());
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const accent = accentProp ?? colors.accent;
+  const today = todayIndex ?? dayIndex(new Date());
   const total = counts.reduce((a, b) => a + b, 0);
   const reached = goal > 0 && total >= goal;
   const progress = goal > 0 ? Math.min(1, total / goal) : 0;
@@ -69,31 +88,42 @@ export function WeekWidget({
         {counts.map((n, i) => {
           const isToday = i === today;
           const future = i > today;
+          const tappable = !!onDayPress && !future;
+          const selected = selectedDay === i;
           return (
-            <View
+            <Pressable
               key={i}
+              onPress={tappable ? () => onDayPress!(i) : undefined}
+              disabled={!tappable}
               style={styles.day}
-              accessibilityLabel={`${DAY_NAMES[i]}${isToday ? ' (today)' : ''}: ${n} ${plural(n, unit)}`}
+              accessibilityRole={tappable ? 'button' : undefined}
+              accessibilityState={tappable ? { selected } : undefined}
+              accessibilityLabel={`${DAY_NAMES[i]}${dayNumbers ? ` ${dayNumbers[i]}` : ''}${isToday ? ' (today)' : ''}: ${n} ${plural(n, unit)}${tappable ? (selected ? '. Tap to hide' : '. Tap to see') : ''}`}
             >
               <Text style={[styles.letter, isToday && styles.letterToday]}>{LETTERS[i]}</Text>
-              <View
-                style={[
-                  styles.dot,
-                  n > 0 && { backgroundColor: accent, borderColor: accent },
-                  isToday && n === 0 && styles.dotToday,
-                  future && styles.dotFuture,
-                ]}
-              >
-                {n > 0 ? <Text style={styles.dotText}>{n}</Text> : null}
+              <View style={[styles.ring, selected && { borderColor: accent }]}>
+                <View
+                  style={[
+                    styles.dot,
+                    n > 0 && { backgroundColor: accent, borderColor: accent },
+                    isToday && n === 0 && styles.dotToday,
+                    future && styles.dotFuture,
+                  ]}
+                >
+                  {n > 0 ? <Text style={styles.dotText}>{n}</Text> : null}
+                </View>
               </View>
-            </View>
+              {dayNumbers ? <Text style={[styles.dayNum, (isToday || selected) && styles.letterToday]}>{dayNumbers[i]}</Text> : null}
+            </Pressable>
           );
         })}
       </View>
 
       <View style={styles.footer}>
         <Text style={styles.streak}>
-          {streak > 0 ? (
+          {summary ? (
+            summary
+          ) : streak > 0 ? (
             <>
               <Text style={styles.streakNum}>{streak}</Text>-week streak
             </>
@@ -135,7 +165,7 @@ export function WeekWidget({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -161,6 +191,9 @@ const styles = StyleSheet.create({
   day: { alignItems: 'center', gap: space(2), flex: 1 },
   letter: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
   letterToday: { color: colors.text },
+  dayNum: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: -space(1) },
+  // A ring around the dot of the day you tapped.
+  ring: { padding: 2, borderRadius: 21, borderWidth: 2, borderColor: 'transparent' },
   dot: {
     width: 34,
     height: 34,
@@ -200,4 +233,4 @@ const styles = StyleSheet.create({
   stepBtnDim: { opacity: 0.4 },
   stepText: { color: colors.text, fontSize: 16, fontWeight: '700', lineHeight: 18 },
   goalNum: { color: colors.text, fontSize: 15, fontWeight: '800', minWidth: 18, textAlign: 'center' },
-});
+}));

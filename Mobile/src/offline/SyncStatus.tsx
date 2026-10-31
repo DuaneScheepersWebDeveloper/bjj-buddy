@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
 import { useOfflineSync } from './OfflineSync';
-import { colors, radius, space } from '../theme';
+import { radius, space } from '../theme';
+import { makeStyles, useTheme } from '../ThemeContext';
 
-const AMBER = '#E8A33D';
-const GREEN = '#4CC38A';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -26,6 +25,8 @@ const BOTTOM = Platform.OS === 'ios' ? 34 : Platform.OS === 'android' ? 28 : spa
  * Tap it to open the details panel above it.
  */
 export function SyncStatus() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { pending, failed, syncing, offline, lastUploadAt, syncNow, retryFailed, dismissFailed } = useOfflineSync();
   const [open, setOpen] = useState(false);
   const [justUploaded, setJustUploaded] = useState(false);
@@ -42,14 +43,14 @@ export function SyncStatus() {
     return (
       <View style={styles.dock} pointerEvents="none">
         <View style={styles.pill} accessibilityLiveRegion="polite">
-          <View style={[styles.dot, { backgroundColor: GREEN }]} />
+          <View style={[styles.dot, { backgroundColor: colors.success }]} />
           <Text style={styles.text}>All changes uploaded</Text>
         </View>
       </View>
     );
   }
 
-  let dot = AMBER;
+  let dot = colors.warning;
   let message: string;
   if (syncing) {
     message = `Uploading ${plural(pending.length, 'change')}…`;
@@ -80,7 +81,7 @@ export function SyncStatus() {
                 <Text style={styles.itemLabel}>{item.label}</Text>
                 <Text style={styles.itemMeta}>Saved {timeAgo(item.createdAt)}</Text>
               </View>
-              <Text style={[styles.badge, { color: AMBER, borderColor: AMBER }]}>WAITING</Text>
+              <Text style={[styles.badge, { color: colors.warning, borderColor: colors.warning }]}>WAITING</Text>
             </View>
           ))}
 
@@ -120,7 +121,7 @@ export function SyncStatus() {
         accessibilityLabel={`${message}. Tap for details.`}
         style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
       >
-        {syncing ? <ActivityIndicator size="small" color={AMBER} /> : <View style={[styles.dot, { backgroundColor: dot }]} />}
+        {syncing ? <ActivityIndicator size="small" color={colors.warning} /> : <View style={[styles.dot, { backgroundColor: dot }]} />}
         <Text style={styles.text} numberOfLines={1}>{message}</Text>
         <Text style={styles.chevron}>{open ? '▾' : '▴'}</Text>
       </Pressable>
@@ -128,7 +129,7 @@ export function SyncStatus() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   dock: {
     position: 'absolute',
     left: space(4),
@@ -148,7 +149,7 @@ const styles = StyleSheet.create({
     paddingVertical: space(2),
     maxWidth: '100%',
     shadowColor: '#000',
-    shadowOpacity: 0.4,
+    shadowOpacity: colors.shadowOpacity,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
@@ -162,7 +163,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     marginBottom: space(2),
     shadowColor: '#000',
-    shadowOpacity: 0.45,
+    shadowOpacity: colors.shadowOpacity + 0.05,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 6 },
     elevation: 10,
@@ -197,4 +198,4 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   syncText: { color: colors.text, fontSize: 14, fontWeight: '700' },
-});
+}));
