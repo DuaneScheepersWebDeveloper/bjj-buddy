@@ -12,14 +12,24 @@ export type VoiceField = 'went_right' | 'went_wrong' | 'to_improve';
 type VoiceStatus = { enabled: boolean; max_seconds: number };
 type VoiceResult = { transcript: string; text: string; tidied: boolean };
 
-// Asked once per app launch: is voice set up on the server, and how long can a recording be?
+// Remembered once the server says voice notes are switched on (until the app restarts).
 let statusCache: VoiceStatus | null = null;
 const DEFAULT_MAX_SECONDS = 300;
+
+// Speech doesn't need music quality: mono, 16 kHz, 32 kbps is about 0.25 MB a minute
+// (a quarter of the default), so voice notes upload quickly even on gym Wi-Fi.
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 32000,
+};
 
 type State =
   | { kind: 'idle' }
   | { kind: 'recording' }
-  | { kind: 'working' }
+  | { kind: 'checking' }
+  | { kind: 'working'; startedAt: number }
   | { kind: 'waiting'; uri: string } // recorded offline: turns into text when back online
   | { kind: 'review'; result: VoiceResult }
   | { kind: 'error'; message: string; uri?: string };
@@ -40,6 +50,9 @@ async function readAsBase64(uri: string): Promise<string> {
   });
 }
 
+const NOT_SET_UP =
+  "Voice notes aren't switched on yet. Add OPENAI_API_KEY to Backend/.env on your PC, then restart the API (see “Voice notes” in the README).";
+
 type Props = {
   field: VoiceField;
   /** What's already typed in the box (decides whether to offer "Add" or "Use"). */
@@ -57,7 +70,7 @@ export function VoiceNote({ field, current, onUse }: Props) {
   const { colors } = useTheme();
   const { request } = useAuth();
   const { offline } = useOfflineSync();
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const recordingRef = useRef(false);
@@ -67,15 +80,46 @@ export function VoiceNote({ field, current, onUse }: Props) {
   const pulse = useRef(new Animated.Value(1)).current;
   const maxSeconds = status?.max_seconds ?? DEFAULT_MAX_SECONDS;
 
-  useEffect(() => {
-    if (statusCache) return;
-    request<VoiceStatus>('/voice/status', { timeoutMs: 8000 })
-      .then((s) => {
+  const run = useRef(0); // lets Cancel ignore an upload that's still going
+  const [, tick] = useState(0);
+
+  /**
+   * Ask the server whether voice notes are switched on. Returns false (and shows why) if not.
+   * If the server can't be reached, recording is still allowed: it'll be turned into text later.
+   */
+  const checkReady = useCallback(async (): Promise<boolean> => {
+    if (statusCache?.enabled) return true;
+    try {
+      const s = await request<VoiceStatus>('/voice/status', { timeoutMs: 5000 });
+      setStatus(s);
+      if (s.enabled) {
         statusCache = s;
-        setStatus(s);
-      })
-      .catch(() => {}); // offline: let them record anyway; we'll find out later
+        return true;
+      }
+      setState({ kind: 'error', message: NOT_SET_UP });
+      return false;
+    } catch (err) {
+      if (isNetworkError(err)) return true; // offline: record now, convert later
+      if (err instanceof ApiError && err.status === 404) {
+        setState({ kind: 'error', message: 'The server needs restarting to switch voice notes on.' });
+        return false;
+      }
+      return true;
+    }
   }, [request]);
+
+  useEffect(() => {
+    checkReady().then((ok) => {
+      if (!ok) setState({ kind: 'idle' }); // don't show an error before they've tapped anything
+    });
+  }, [checkReady]);
+
+  // Count the seconds while converting, so it never looks stuck.
+  useEffect(() => {
+    if (state.kind !== 'working') return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [state.kind]);
 
   // Pulsing red dot while recording.
   useEffect(() => {
@@ -92,18 +136,24 @@ export function VoiceNote({ field, current, onUse }: Props) {
 
   const process = useCallback(
     async (uri: string) => {
-      setState({ kind: 'working' });
+      const id = ++run.current;
+      setState({ kind: 'working', startedAt: Date.now() });
       try {
         const audio_base64 = await readAsBase64(uri);
         const result = await request<VoiceResult>('/voice/notes', {
           method: 'POST',
           body: { audio_base64, field },
-          timeoutMs: 120_000,
+          timeoutMs: 90_000,
         });
+        if (id !== run.current) return; // cancelled
         setShowWords(false);
         setState({ kind: 'review', result });
       } catch (err) {
-        if (isNetworkError(err)) setState({ kind: 'waiting', uri });
+        if (id !== run.current) return; // cancelled
+        if (err instanceof ApiError && err.status === 503 && /set up/i.test(err.message)) {
+          statusCache = null;
+          setState({ kind: 'error', message: NOT_SET_UP });
+        } else if (isNetworkError(err)) setState({ kind: 'waiting', uri });
         else setState({ kind: 'error', message: err instanceof ApiError ? err.message : 'Something went wrong. Please try again.', uri });
       }
     },
@@ -117,10 +167,8 @@ export function VoiceNote({ field, current, onUse }: Props) {
   }, [offline]);
 
   async function start() {
-    if (status && !status.enabled) {
-      setState({ kind: 'error', message: "Voice notes aren't set up on the server yet. See “Voice notes” in the README." });
-      return;
-    }
+    setState({ kind: 'checking' });
+    if (!(await checkReady())) return;
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) {
@@ -204,11 +252,40 @@ export function VoiceNote({ field, current, onUse }: Props) {
     );
   }
 
-  if (state.kind === 'working') {
+  if (state.kind === 'checking') {
     return (
       <View style={[styles.box, styles.centerRow]}>
         <ActivityIndicator color={colors.text} />
-        <Text style={styles.workingText}>Turning your voice note into text…</Text>
+        <Text style={styles.workingText}>Getting ready…</Text>
+      </View>
+    );
+  }
+
+  if (state.kind === 'working') {
+    const secs = Math.floor((Date.now() - state.startedAt) / 1000);
+    return (
+      <View style={styles.box}>
+        <View style={styles.centerRow}>
+          <ActivityIndicator color={colors.text} />
+          <Text style={styles.workingText}>Turning your voice note into text… {secs > 2 ? `${secs} s` : ''}</Text>
+        </View>
+        <Text style={[styles.hint, styles.workingHint]}>
+          {secs < 20 ? 'Usually takes a few seconds.' : 'Taking longer than usual. Weak signal? You can cancel and try again.'}
+        </Text>
+        <View style={styles.row}>
+          <View />
+          <Pressable
+            onPress={() => {
+              run.current++;
+              setState({ kind: 'idle' });
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={styles.textBtn}
+          >
+            <Text style={styles.textBtnText}>Cancel</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
@@ -364,6 +441,7 @@ const useStyles = makeStyles((colors) => ({
   stopText: { color: colors.white, fontSize: 15, fontWeight: '800' },
 
   workingText: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
+  workingHint: { marginTop: space(2) },
 
   result: { color: colors.text, fontSize: 15, lineHeight: 22 },
   wordsToggle: { marginTop: space(3), alignSelf: 'flex-start' },

@@ -63,7 +63,7 @@ This starts the Postgres container in Docker (creating it the first time), activ
 ```bash
 cd Mobile
 npm install
-npx expo install expo-secure-store expo-constants expo-image-picker @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
+npx expo install expo-secure-store expo-constants expo-image-picker expo-audio @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
 ```
 
 **No `.env` needed.** The app finds the backend by itself: `localhost:8000` in a browser, and your PC's Wi-Fi IP (taken from the Expo dev server) on a phone. Only set `EXPO_PUBLIC_API_URL` in `Mobile/.env` to point at a different server. See `.env.example`.
@@ -115,6 +115,7 @@ Backend/
 │   ├── idempotency.py       Makes outbox retries safe (no duplicates)
 │   ├── make_admin.py        Command to make a user an admin
 │   ├── techniques_seed.py   Built-in BJJ technique library
+│   ├── voice.py             Voice notes: speech to text, then tidy up (OpenAI)
 │   ├── usernames.py         Username rules (format, reserved names, uniqueness)
 │   ├── schemas.py           Shapes of data the API returns
 │   ├── error_logging.py     Error capture into the error_log table
@@ -157,6 +158,26 @@ Tap **Log a session** on the home page (or in the menu). It's four short pages:
 - Saving works **offline** and uploads later.
 - The home page shows your **training week** (weekly goal and streak). **Tap a day with a session** to see that day's sessions, and use **‹ ›** to look at earlier weeks. Tap a session to see, edit or delete it.
 
+### Voice notes
+
+Under each notes box there's **Record instead**. Talk it through, tap **Done**, and a few seconds later you get clear, tidy notes, with BJJ terms spelled right. Choose **Use this** / **Add to my notes**, **Replace**, or **Discard**. You can also see exactly what you said word for word. If you record with no signal, it's kept and turned into text when you're back online. Recordings are never saved on the server.
+
+**Setup (once):**
+
+1. `expo-audio` must be installed in `Mobile` (`npx expo install expo-audio`). Then restart Expo.
+2. Get an API key at <https://platform.openai.com/api-keys> and add a few dollars of credit under Billing. **Never paste the key into a chat or commit it.**
+3. Add it to `Backend/.env` and restart the API:
+
+```env
+OPENAI_API_KEY=sk-...
+# Optional:
+VOICE_MAX_SECONDS=300          # longest recording; up to 600 (10 minutes)
+VOICE_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+VOICE_TIDY_MODEL=gpt-6-luna    # the model that tidies the text. If your account doesn't have it, the API tries gpt-5-mini, gpt-4.1-mini, then gpt-4o-mini
+```
+
+**Cost:** roughly $0.003 per minute of speech, plus a fraction of a cent to tidy it, so a 3-minute note costs about one US cent. Set a monthly spend limit under **Billing → Limits** on the OpenAI site to be safe. If tidying ever fails, you still get the word-for-word text.
+
 **Technique library:** the built-in list lives in `Backend/app/techniques_seed.py` and is added to the `technique` table when the API starts. Add a line there to add a technique. Techniques users type in themselves are saved to their account only. The app keeps a copy (`Mobile/src/data/techniques.ts`) for the first time it's used offline, so keep the two in step.
 
 | Endpoint | What it does |
@@ -165,6 +186,8 @@ Tap **Log a session** on the home page (or in the menu). It's four short pages:
 | `PUT /sessions/{id}` | Log or edit a session (the app makes the id, so offline retries never double up) |
 | `DELETE /sessions/{id}` | Delete one of your sessions |
 | `GET /techniques` | The technique library plus your own techniques |
+| `GET /voice/status` | Whether voice notes are set up, and the longest recording allowed |
+| `POST /voice/notes` | A recording in, clear written notes out (`{audio_base64, field}`) |
 
 ## Light and dark mode
 
@@ -234,6 +257,8 @@ Include the date/time the user did the thing in the body (not when it uploads), 
 | `Docker Desktop is not running` | Open Docker Desktop, wait for it to start, run `./start.sh` again |
 | App says "Can't reach the server" | Check the backend is running. Remove any `localhost` or old IP `EXPO_PUBLIC_API_URL` from `Mobile/.env` and restart Expo. The error shows the address it tried |
 | `Unable to resolve module expo-secure-store` | Run `npx expo install expo-secure-store` in `Mobile` |
+| Voice note says it isn't switched on | Add `OPENAI_API_KEY` to `Backend/.env` (no spaces around `=`, file named `.env` not `.env.txt`) and restart the API |
+| Voice note says the key was refused | The key is wrong, deleted, or the account has no credit. Check Billing on the OpenAI site |
 | `column ... does not exist` | A model gained a field your existing table doesn't have. See "Adding a field to a model" above |
 | `Port 8081 is being used` | Another Expo server is still running. Press `Y` to use another port, or close the other terminal |
 | Phone can't connect but the browser can | Allow Python through Windows Firewall on private networks, and make sure the phone is on the same Wi-Fi |
@@ -243,7 +268,7 @@ Include the date/time the user did the thing in the body (not when it uploads), 
 - [x] Home screen: weekly training widget (tap a day to see its sessions)
 - [x] Log training sessions from the app (works offline)
 - [ ] Stats page (sub tally: subs vs taps per week, techniques over time, Gi vs No-Gi, most common subs)
-- [ ] Voice notes (parked): code is in `Mobile/src/components/VoiceNote.tsx`, `Backend/app/voice.py` and `Backend/app/routers/voice.py`, switched off. Decide on paid (OpenAI) vs free (Whisper on the PC) first
+- [x] Voice notes for what went right / wrong (OpenAI)
 - [x] Lock `/users` endpoints to the logged-in user / admins
 - [x] Lock `/sessions` endpoints to the logged-in user
 - [ ] Belt and stripe progress tracking

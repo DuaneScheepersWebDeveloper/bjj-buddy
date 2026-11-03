@@ -29,6 +29,12 @@
           "photosPermission": "BJJ Buddy uses your photos so you can choose a profile picture.",
           "cameraPermission": "BJJ Buddy uses your camera so you can take a profile picture."
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "BJJ Buddy uses your microphone so you can record voice notes about your training."
+        }
       ]
     ]
   }

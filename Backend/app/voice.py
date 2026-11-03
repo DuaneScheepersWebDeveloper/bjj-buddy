@@ -74,6 +74,14 @@ def detect_audio_type(data: bytes) -> Optional[str]:
     return None
 
 
+class ModelNotFound(VoiceError):
+    """OpenAI doesn't know (or doesn't give this key access to) the model name."""
+
+
+# Tried in order if VOICE_TIDY_MODEL isn't available on your OpenAI account.
+TIDY_FALLBACK_MODELS = ("gpt-5-mini", "gpt-4.1-mini", "gpt-4o-mini")
+
+
 def _request(path: str, *, body: bytes, content_type: str, timeout: int) -> dict:
     req = urllib.request.Request(
         f"{OPENAI_URL}{path}",
@@ -89,6 +97,8 @@ def _request(path: str, *, body: bytes, content_type: str, timeout: int) -> dict
         log.error("OpenAI %s failed: %s %s", path, e.code, detail)
         if e.code == 401:
             raise VoiceError("Voice notes aren't set up correctly (the API key was refused).", 503)
+        if e.code in (400, 404) and "model" in detail.lower():
+            raise ModelNotFound("That AI model isn't available on this account.", 502)
         if e.code == 429:
             raise VoiceError("The voice service is busy or out of credit. Try again in a minute.", 503)
         raise VoiceError("Couldn't turn that recording into text. Please try again.")
@@ -138,24 +148,34 @@ Reply with the notes only: no title, no intro, no quotes."""
 
 def tidy(transcript: str, field: str, limit: int = 1800) -> Optional[str]:
     """Rewrite the transcript as clear notes. Returns None if it couldn't (the caller falls back)."""
+    global _working_tidy_model
     if not transcript.strip():
         return None
-    payload = {
-        "model": settings.voice_tidy_model,
-        "messages": [
-            {"role": "system", "content": TIDY_INSTRUCTIONS.format(topic=FIELD_HINT.get(field, "their session"), limit=limit)},
-            {"role": "user", "content": transcript},
-        ],
-    }
-    try:
-        result = _request(
-            "/chat/completions",
-            body=json.dumps(payload).encode("utf-8"),
-            content_type="application/json",
-            timeout=60,
-        )
-        text = result["choices"][0]["message"]["content"].strip()
-        return text[:limit] or None
-    except (VoiceError, KeyError, IndexError, TypeError) as e:
-        log.error("Tidy-up failed, returning the plain transcript: %s", e)
-        return None
+    messages = [
+        {"role": "system", "content": TIDY_INSTRUCTIONS.format(topic=FIELD_HINT.get(field, "their session"), limit=limit)},
+        {"role": "user", "content": transcript},
+    ]
+    candidates = [_working_tidy_model] if _working_tidy_model else [settings.voice_tidy_model, *TIDY_FALLBACK_MODELS]
+    for model in dict.fromkeys(candidates):  # in order, no repeats
+        try:
+            result = _request(
+                "/chat/completions",
+                body=json.dumps({"model": model, "messages": messages}).encode("utf-8"),
+                content_type="application/json",
+                timeout=60,
+            )
+            text = result["choices"][0]["message"]["content"].strip()
+            if model != settings.voice_tidy_model and _working_tidy_model is None:
+                log.warning("VOICE_TIDY_MODEL %r isn't available; using %r instead", settings.voice_tidy_model, model)
+            _working_tidy_model = model  # remember it until the API restarts
+            return text[:limit] or None
+        except ModelNotFound:
+            continue
+        except (VoiceError, KeyError, IndexError, TypeError) as e:
+            log.error("Tidy-up failed, returning the plain transcript: %s", e)
+            return None
+    log.error("None of the tidy-up models are available; returning the plain transcript")
+    return None
+
+
+_working_tidy_model: Optional[str] = None

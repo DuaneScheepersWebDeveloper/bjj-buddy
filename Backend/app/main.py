@@ -7,7 +7,7 @@ from app.database import create_db_and_tables
 from app.error_logging import setup_error_logging
 from app.error_middleware import ErrorLoggingMiddleware, register_exception_handlers
 from app.idempotency import IdempotencyMiddleware, purge_old_records
-from app.routers import admin, admin_tasks, auth, users, sessions, errors
+from app.routers import admin, admin_tasks, auth, users, sessions, voice, errors
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -27,8 +27,7 @@ app.include_router(admin.router)
 app.include_router(admin_tasks.router)
 app.include_router(users.router)
 app.include_router(sessions.router)
-# Voice notes are switched off for now. To bring them back, import `voice` above and add:
-# app.include_router(voice.router)
+app.include_router(voice.router)
 app.include_router(errors.router)
 
 # Uploaded files (profile pictures) are served from Backend/uploads at /uploads/...

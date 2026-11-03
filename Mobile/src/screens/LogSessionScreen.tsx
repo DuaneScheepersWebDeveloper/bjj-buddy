@@ -6,6 +6,7 @@ import { useSessions } from '../sessions/SessionsContext';
 import { newId } from '../offline/outbox';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { TechniquePicker } from '../components/TechniquePicker';
+import { VoiceNote, type VoiceField } from '../components/VoiceNote';
 import { CalendarPicker } from '../components/CalendarPicker';
 import { radius, space } from '../theme';
 import { makeStyles, useTheme } from '../ThemeContext';
@@ -321,6 +322,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
 
           <View style={styles.card}>
             <Notes
+              field="went_right"
               value={draft.went_right}
               onChange={(went_right) => update({ went_right })}
               placeholder="e.g. Guard retention felt solid. Hit the knee slice twice and stayed calm under side control."
@@ -367,6 +369,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
 
           <View style={styles.card}>
             <Notes
+              field="went_wrong"
               value={draft.went_wrong}
               onChange={(went_wrong) => update({ went_wrong })}
               placeholder="e.g. Kept getting flattened in half guard. Gassed out in the last round."
@@ -389,6 +392,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
           <View style={styles.card}>
             <SectionHeader title="What will you work on?" subtitle="Things you noticed you can improve" />
             <Notes
+              field="to_improve"
               value={draft.to_improve}
               onChange={(to_improve) => update({ to_improve })}
               placeholder="e.g. Frames before shrimping. Ask coach about the triangle defence."
@@ -625,11 +629,13 @@ function RoundButton({ label, a11y, onPress }: { label: string; a11y: string; on
 
 /** A roomy notes box: detailed but brief (up to 2000 characters). */
 function Notes({
+  field,
   value,
   onChange,
   placeholder,
   short,
 }: {
+  field: VoiceField;
   value: string | null;
   onChange: (t: string) => void;
   placeholder: string;
@@ -659,6 +665,7 @@ function Notes({
           {length} / {MAX_NOTES}
         </Text>
       ) : null}
+      <VoiceNote field={field} current={value} onUse={(text) => onChange(text.slice(0, MAX_NOTES))} />
     </View>
   );
 }
