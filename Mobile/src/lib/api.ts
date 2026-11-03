@@ -83,10 +83,13 @@ export type AuthResponse = {
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** The server was reachable but didn't answer in time (status is 0, like being offline). */
+  timedOut: boolean;
+  constructor(message: string, status: number, timedOut = false) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.timedOut = timedOut;
   }
 }
 
@@ -142,6 +145,9 @@ export async function api<T>(
     });
   } catch {
     const hint = __DEV__ ? ` (tried ${API_URL})` : '';
+    if (controller.signal.aborted) {
+      throw new ApiError(`The server took too long to answer. Please try again.${hint}`, 0, true);
+    }
     throw new ApiError(`Can't reach the server. Check your connection and try again.${hint}`, 0);
   } finally {
     clearTimeout(timeout);

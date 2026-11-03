@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { File } from 'expo-file-system';
 import { useAuth } from '../auth/AuthContext';
 import { useOfflineSync } from '../offline/OfflineSync';
 import { ApiError, isNetworkError } from '../lib/api';
@@ -40,15 +41,31 @@ const clock = (ms: number) => {
 };
 
 /** Read a recorded file as base64 (works on phones and in the browser, no extra packages). */
-async function readAsBase64(uri: string): Promise<string> {
+/** Android can give a plain path ("/data/user/0/..."); reading it needs the file:// prefix. */
+function toFileUri(uri: string): string {
+  return uri.startsWith('/') ? `file://${uri}` : uri;
+}
+
+async function readAsBase64(uri: string): Promise<{ dataUrl: string; bytes: number }> {
+  if (Platform.OS !== 'web') {
+    // On phones, read the file directly. (fetch() on a file:// path can return almost nothing on Android.)
+    const file = new File(toFileUri(uri));
+    const base64 = await file.base64();
+    return { dataUrl: `data:audio/mp4;base64,${base64}`, bytes: Math.floor((base64.length * 3) / 4) };
+  }
+  // In the browser the recording is a blob: URL, which fetch() reads fine.
   const blob = await (await fetch(uri)).blob();
-  return new Promise((resolve, reject) => {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Could not read the recording'));
     reader.onload = () => resolve(String(reader.result));
     reader.readAsDataURL(blob);
   });
+  return { dataUrl, bytes: blob.size };
 }
+
+// Below this the "recording" is really an empty file (half a second of speech is bigger).
+const MIN_BYTES = 2000;
 
 const NOT_SET_UP =
   "Voice notes aren't switched on yet. Add OPENAI_API_KEY to Backend/.env on your PC, then restart the API (see “Voice notes” in the README).";
@@ -81,6 +98,7 @@ export function VoiceNote({ field, current, onUse }: Props) {
   const maxSeconds = status?.max_seconds ?? DEFAULT_MAX_SECONDS;
 
   const run = useRef(0); // lets Cancel ignore an upload that's still going
+  const elapsedRef = useRef(0); // how long the last recording ran
   const [, tick] = useState(0);
 
   /**
@@ -135,14 +153,28 @@ export function VoiceNote({ field, current, onUse }: Props) {
   }, [state.kind, pulse]);
 
   const process = useCallback(
-    async (uri: string) => {
+    async (uri: string, recordedMs?: number) => {
       const id = ++run.current;
       setState({ kind: 'working', startedAt: Date.now() });
       try {
-        const audio_base64 = await readAsBase64(uri);
+        const { dataUrl: audio_base64, bytes } = await readAsBase64(uri);
+        if (bytes < MIN_BYTES) {
+          // The phone saved (or we read) an empty file: say so plainly, with details to fix it.
+          const secs = recordedMs != null ? `${Math.round(recordedMs / 1000)} s recorded, ` : '';
+          setState({
+            kind: 'error',
+            message: `The recording came out empty (${secs}${bytes} bytes saved). Try again. If it keeps happening, send a screenshot of this: ${uri.slice(-60)}`,
+          });
+          return;
+        }
         const result = await request<VoiceResult>('/voice/notes', {
           method: 'POST',
-          body: { audio_base64, field },
+          body: {
+            audio_base64,
+            field,
+            filename: uri.split('/').pop()?.split('?')[0] ?? null,
+            recorded_ms: recordedMs ?? null,
+          },
           timeoutMs: 90_000,
         });
         if (id !== run.current) return; // cancelled
@@ -153,6 +185,12 @@ export function VoiceNote({ field, current, onUse }: Props) {
         if (err instanceof ApiError && err.status === 503 && /set up/i.test(err.message)) {
           statusCache = null;
           setState({ kind: 'error', message: NOT_SET_UP });
+        } else if (err instanceof ApiError && err.timedOut) {
+          setState({
+            kind: 'error',
+            message: 'The server took too long to turn this into text. Tap Try again. If it keeps happening, check the API terminal on your PC.',
+            uri,
+          });
         } else if (isNetworkError(err)) setState({ kind: 'waiting', uri });
         else setState({ kind: 'error', message: err instanceof ApiError ? err.message : 'Something went wrong. Please try again.', uri });
       }
@@ -192,15 +230,20 @@ export function VoiceNote({ field, current, onUse }: Props) {
         // already stopped
       }
       setAudioModeAsync({ allowsRecording: false }).catch(() => {});
-      const uri = recorder.uri;
-      if (!keep || !uri) return setState({ kind: 'idle' });
-      process(uri);
+      const uri = recorder.uri ?? recorderState.url ?? null;
+      if (!keep) return setState({ kind: 'idle' });
+      if (!uri) {
+        setState({ kind: 'error', message: "The phone didn't save the recording. Please try again." });
+        return;
+      }
+      process(uri, elapsedRef.current);
     },
-    [recorder, process],
+    [recorder, recorderState.url, process],
   );
 
   // Stop by itself at the time limit.
   const elapsed = recorderState.durationMillis ?? 0;
+  elapsedRef.current = elapsed;
   useEffect(() => {
     if (state.kind === 'recording' && elapsed >= maxSeconds * 1000) stop(true);
   }, [state.kind, elapsed, maxSeconds, stop]);
@@ -294,7 +337,7 @@ export function VoiceNote({ field, current, onUse }: Props) {
     return (
       <View style={styles.box}>
         <Text style={styles.title}>Voice note saved</Text>
-        <Text style={styles.hint}>No signal right now. It'll turn into text as soon as you're back online. Keep this page open.</Text>
+        <Text style={styles.hint}>Couldn't reach the BJJ Buddy server (no signal, or the server isn't running). It'll turn into text as soon as it can. Keep this page open.</Text>
         <View style={styles.row}>
           <Pressable onPress={() => setState({ kind: 'idle' })} hitSlop={8} accessibilityRole="button" style={styles.textBtn}>
             <Text style={styles.textBtnText}>Discard</Text>

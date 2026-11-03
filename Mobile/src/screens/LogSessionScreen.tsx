@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../auth/AuthContext';
@@ -57,6 +57,12 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
   const { colors } = useTheme();
   const { user } = useAuth();
   const { sessions, techniques, saveSession, deleteSession } = useSessions();
+  // How often you've logged each technique, so the picker suggests your usual ones first.
+  const usage = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of sessions) for (const e of s.entries) counts[e.name.toLowerCase()] = (counts[e.name.toLowerCase()] ?? 0) + e.count;
+    return counts;
+  }, [sessions]);
   const userId = user?.id ?? 0;
   const editing = editId ? sessions.find((s) => s.id === editId) ?? null : null;
 
@@ -333,6 +339,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             <SectionHeader title="Subs you got" count={subsFor} color={colors.success} />
             <TechniquePicker
               library={techniques}
+              usage={usage}
               categories={['submission']}
               result="hit"
               entries={draft.entries}
@@ -346,6 +353,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             <SectionHeader title="Other techniques that worked" subtitle="Passes, sweeps, escapes, takedowns, positions" />
             <TechniquePicker
               library={techniques}
+              usage={usage}
               categories={OTHER_CATEGORIES}
               result="hit"
               entries={draft.entries}
@@ -380,6 +388,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             <SectionHeader title="Did you get submitted?" count={subsAgainst} color={colors.danger} />
             <TechniquePicker
               library={techniques}
+              usage={usage}
               categories={['submission']}
               result="conceded"
               entries={draft.entries}

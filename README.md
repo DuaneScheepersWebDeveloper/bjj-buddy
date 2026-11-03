@@ -63,7 +63,7 @@ This starts the Postgres container in Docker (creating it the first time), activ
 ```bash
 cd Mobile
 npm install
-npx expo install expo-secure-store expo-constants expo-image-picker expo-audio @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
+npx expo install expo-secure-store expo-constants expo-image-picker expo-audio expo-file-system @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
 ```
 
 **No `.env` needed.** The app finds the backend by itself: `localhost:8000` in a browser, and your PC's Wi-Fi IP (taken from the Expo dev server) on a phone. Only set `EXPO_PUBLIC_API_URL` in `Mobile/.env` to point at a different server. See `.env.example`.
@@ -164,7 +164,7 @@ Under each notes box there's **Record instead**. Talk it through, tap **Done**, 
 
 **Setup (once):**
 
-1. `expo-audio` must be installed in `Mobile` (`npx expo install expo-audio`). Then restart Expo.
+1. `expo-audio` and `expo-file-system` must be installed in `Mobile` (`npx expo install expo-audio expo-file-system`). Then restart Expo.
 2. Get an API key at <https://platform.openai.com/api-keys> and add a few dollars of credit under Billing. **Never paste the key into a chat or commit it.**
 3. Add it to `Backend/.env` and restart the API:
 
@@ -173,8 +173,10 @@ OPENAI_API_KEY=sk-...
 # Optional:
 VOICE_MAX_SECONDS=300          # longest recording; up to 600 (10 minutes)
 VOICE_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
-VOICE_TIDY_MODEL=gpt-6-luna    # the model that tidies the text. If your account doesn't have it, the API tries gpt-5-mini, gpt-4.1-mini, then gpt-4o-mini
+VOICE_TIDY_MODEL=gpt-4.1-mini  # the model that tidies the text. If it's unavailable or slower than 20 s, the API tries others or gives you the word-for-word text
 ```
+
+Each voice note prints a line in the API terminal showing how long each step took, e.g. `Voice note: 0.12 MB m4a | speech-to-text 2.3s | tidy-up 1.4s (gpt-4.1-mini) | total 3.8s`.
 
 **Cost:** roughly $0.003 per minute of speech, plus a fraction of a cent to tidy it, so a 3-minute note costs about one US cent. Set a monthly spend limit under **Billing → Limits** on the OpenAI site to be safe. If tidying ever fails, you still get the word-for-word text.
 

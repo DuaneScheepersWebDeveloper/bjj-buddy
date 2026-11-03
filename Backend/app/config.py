@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     voice_max_seconds: int = 300
     # Speech-to-text model, and the model that tidies the text up. Change these if OpenAI renames them.
     voice_transcribe_model: str = "gpt-4o-mini-transcribe"
-    voice_tidy_model: str = "gpt-6-luna"
+    voice_tidy_model: str = "gpt-4.1-mini"
 
     class Config:
         env_file = ".env"

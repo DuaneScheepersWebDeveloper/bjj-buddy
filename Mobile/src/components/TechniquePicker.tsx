@@ -15,7 +15,8 @@ import {
 } from '../sessions/types';
 
 const MAX_COUNT = 50;
-const SHOW_FIRST = 12;
+// Suggestions shown before tapping "Show more" (your most-used first).
+const SHOW_FIRST = 5;
 
 type Props = {
   library: Technique[];
@@ -30,6 +31,8 @@ type Props = {
   accent: string;
   /** Shown when nothing is picked yet. */
   emptyText: string;
+  /** How often you've logged each technique (lower-case name -> times), so your usual ones come first. */
+  usage?: Record<string, number>;
 };
 
 const mine = (e: Entry, categories: Category[], result: Result) =>
@@ -39,7 +42,7 @@ const mine = (e: Entry, categories: Category[], result: Result) =>
  * Pick techniques and how many times: search or filter by position (standing / top / bottom),
  * tap to add, then use − / + to change the count. Anything not in the library can be added by name.
  */
-export function TechniquePicker({ library, categories, result, entries, onChange, accent, emptyText }: Props) {
+export function TechniquePicker({ library, categories, result, entries, onChange, accent, emptyText, usage }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const [search, setSearch] = useState('');
@@ -67,7 +70,17 @@ export function TechniquePicker({ library, categories, result, entries, onChange
     [library, categories, category, position, term],
   );
   const exact = term && library.some((t) => categories.includes(t.category) && t.name.toLowerCase() === term);
-  const visible = showAll || term ? matches : matches.slice(0, SHOW_FIRST);
+  // Collapsed: your 5 most-used (not already picked), topped up from the library in its usual order.
+  const suggestions = useMemo(() => {
+    const picked = new Set(selected.map((e) => e.name.toLowerCase()));
+    const order = new Map(matches.map((t, i) => [t, i]));
+    return matches
+      .filter((t) => !picked.has(t.name.toLowerCase()))
+      .sort((a, b) => (usage?.[b.name.toLowerCase()] ?? 0) - (usage?.[a.name.toLowerCase()] ?? 0) || order.get(a)! - order.get(b)!)
+      .slice(0, SHOW_FIRST);
+  }, [matches, selected, usage]);
+  const expanded = showAll || !!term;
+  const visible = expanded ? matches : suggestions;
 
   function setCount(t: Pick<Entry, 'name' | 'category' | 'position' | 'technique_id'>, count: number) {
     const others = entries.filter((e) => !(mine(e, categories, result) && e.name.toLowerCase() === t.name.toLowerCase()));
@@ -166,7 +179,7 @@ export function TechniquePicker({ library, categories, result, entries, onChange
         ) : null}
       </View>
 
-      {categories.length > 1 ? (
+      {showAll && categories.length > 1 ? (
         <View style={styles.filterRow}>
           {(['all', ...categories] as const).map((c) => (
             <FilterChip
@@ -178,17 +191,19 @@ export function TechniquePicker({ library, categories, result, entries, onChange
           ))}
         </View>
       ) : null}
-      <View style={styles.filterRow}>
-        {(['all', ...POSITIONS] as const).map((p) => (
-          <FilterChip
-            key={p}
-            label={p === 'all' ? 'Any position' : POSITION_LABEL[p]}
-            on={position === p}
-            onPress={() => setPosition(p)}
-            subtle
-          />
-        ))}
-      </View>
+      {showAll ? (
+        <View style={styles.filterRow}>
+          {(['all', ...POSITIONS] as const).map((p) => (
+            <FilterChip
+              key={p}
+              label={p === 'all' ? 'Any position' : POSITION_LABEL[p]}
+              on={position === p}
+              onPress={() => setPosition(p)}
+              subtle
+            />
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.chips}>
         {visible.map((t) => {
@@ -214,9 +229,21 @@ export function TechniquePicker({ library, categories, result, entries, onChange
         {visible.length === 0 && !term ? <Text style={styles.empty}>Nothing here. Try another filter.</Text> : null}
       </View>
 
-      {!term && matches.length > SHOW_FIRST ? (
-        <Pressable onPress={() => setShowAll((s) => !s)} hitSlop={8} accessibilityRole="button" style={styles.more}>
-          <Text style={styles.moreText}>{showAll ? 'Show fewer' : `Show all ${matches.length}`}</Text>
+      {!term ? (
+        <Pressable
+          onPress={() => {
+            setShowAll((s) => !s);
+            // Back to the short list: clear the filters too.
+            if (showAll) {
+              setPosition('all');
+              setCategory(categories.length === 1 ? categories[0] : 'all');
+            }
+          }}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={styles.more}
+        >
+          <Text style={styles.moreText}>{showAll ? 'Show fewer' : 'Show more and filter by position'}</Text>
         </Pressable>
       ) : null}
 

@@ -57,12 +57,24 @@ def max_bytes() -> int:
     return min(MAX_UPLOAD_BYTES, max_seconds() * 32 * 1024 + 512 * 1024)
 
 
+# Formats OpenAI's speech-to-text accepts (by file extension).
+SUPPORTED_EXTS = {"flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"}
+# What some phones produce that OpenAI can't read.
+UNSUPPORTED = {"amr": "AMR (an old phone format)", "caf": "CAF (Apple Core Audio)", "aac": "raw AAC (ADTS)"}
+
+
 def detect_audio_type(data: bytes) -> Optional[str]:
-    """Work out the audio format from the file's first bytes."""
+    """Work out the audio format from the file's first bytes (one of SUPPORTED_EXTS or UNSUPPORTED)."""
     if len(data) < 12:
         return None
-    if data[4:8] == b"ftyp":
+    if b"ftyp" in data[:64]:  # MP4 family: .m4a, .mp4, .3gp
         return "m4a"
+    if data[:5] == b"#!AMR":
+        return "amr"
+    if data[:4] == b"caff":
+        return "caf"
+    if data[0] == 0xFF and (data[1] & 0xF6) == 0xF0:  # ADTS AAC frame header
+        return "aac"
     if data[:4] == b"\x1aE\xdf\xa3":
         return "webm"
     if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
@@ -79,7 +91,10 @@ class ModelNotFound(VoiceError):
 
 
 # Tried in order if VOICE_TIDY_MODEL isn't available on your OpenAI account.
-TIDY_FALLBACK_MODELS = ("gpt-5-mini", "gpt-4.1-mini", "gpt-4o-mini")
+# Quick, non-"thinking" models first: tidying a few sentences shouldn't take long.
+TIDY_FALLBACK_MODELS = ("gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1-nano", "gpt-6-luna", "gpt-5-mini")
+# Give up on tidying after this long and return the word-for-word text instead.
+TIDY_TIMEOUT_SECONDS = 20
 
 
 def _request(path: str, *, body: bytes, content_type: str, timeout: int) -> dict:
@@ -99,8 +114,12 @@ def _request(path: str, *, body: bytes, content_type: str, timeout: int) -> dict
             raise VoiceError("Voice notes aren't set up correctly (the API key was refused).", 503)
         if e.code in (400, 404) and "model" in detail.lower():
             raise ModelNotFound("That AI model isn't available on this account.", 502)
+        if e.code == 429 and ("insufficient_quota" in detail or "credit" in detail.lower()):
+            raise VoiceError(
+                "The OpenAI account has no credit left. Add some at platform.openai.com > Settings > Billing.", 503
+            )
         if e.code == 429:
-            raise VoiceError("The voice service is busy or out of credit. Try again in a minute.", 503)
+            raise VoiceError("The voice service is busy. Try again in a minute.", 503)
         raise VoiceError("Couldn't turn that recording into text. Please try again.")
     except (urllib.error.URLError, TimeoutError) as e:
         log.error("OpenAI %s unreachable: %s", path, e)
@@ -129,7 +148,7 @@ def transcribe(audio: bytes, ext: str, vocabulary: list[str]) -> str:
         "/audio/transcriptions",
         body=b"".join(parts),
         content_type=f"multipart/form-data; boundary={boundary}",
-        timeout=120,
+        timeout=60,
     )
     return " ".join(str(result.get("text") or "").split())
 
@@ -157,21 +176,32 @@ def tidy(transcript: str, field: str, limit: int = 1800) -> Optional[str]:
     ]
     candidates = [_working_tidy_model] if _working_tidy_model else [settings.voice_tidy_model, *TIDY_FALLBACK_MODELS]
     for model in dict.fromkeys(candidates):  # in order, no repeats
+        if model in _slow_models:
+            continue
         try:
             result = _request(
                 "/chat/completions",
                 body=json.dumps({"model": model, "messages": messages}).encode("utf-8"),
                 content_type="application/json",
-                timeout=60,
+                timeout=TIDY_TIMEOUT_SECONDS,
             )
             text = result["choices"][0]["message"]["content"].strip()
             if model != settings.voice_tidy_model and _working_tidy_model is None:
-                log.warning("VOICE_TIDY_MODEL %r isn't available; using %r instead", settings.voice_tidy_model, model)
+                log.warning("VOICE_TIDY_MODEL %r isn't available or is too slow; using %r instead", settings.voice_tidy_model, model)
             _working_tidy_model = model  # remember it until the API restarts
             return text[:limit] or None
         except ModelNotFound:
             continue
-        except (VoiceError, KeyError, IndexError, TypeError) as e:
+        except VoiceError as e:
+            if e.status == 503 and "reach" in str(e):  # timed out: too slow, skip it from now on
+                _slow_models.add(model)
+                if _working_tidy_model == model:
+                    _working_tidy_model = None
+                log.error("Tidy-up with %s took over %ss; returning the plain transcript", model, TIDY_TIMEOUT_SECONDS)
+            else:
+                log.error("Tidy-up failed, returning the plain transcript: %s", e)
+            return None
+        except (KeyError, IndexError, TypeError) as e:
             log.error("Tidy-up failed, returning the plain transcript: %s", e)
             return None
     log.error("None of the tidy-up models are available; returning the plain transcript")
@@ -179,3 +209,8 @@ def tidy(transcript: str, field: str, limit: int = 1800) -> Optional[str]:
 
 
 _working_tidy_model: Optional[str] = None
+_slow_models: set[str] = set()
+
+
+def tidy_model_in_use() -> Optional[str]:
+    return _working_tidy_model
