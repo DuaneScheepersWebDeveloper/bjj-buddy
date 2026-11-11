@@ -63,7 +63,7 @@ This starts the Postgres container in Docker (creating it the first time), activ
 ```bash
 cd Mobile
 npm install
-npx expo install expo-secure-store expo-constants expo-image-picker expo-audio expo-file-system @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
+npx expo install expo-secure-store expo-constants expo-image-picker expo-audio expo-file-system react-native-svg @react-native-async-storage/async-storage react-dom react-native-web @expo/metro-runtime
 ```
 
 **No `.env` needed.** The app finds the backend by itself: `localhost:8000` in a browser, and your PC's Wi-Fi IP (taken from the Expo dev server) on a phone. Only set `EXPO_PUBLIC_API_URL` in `Mobile/.env` to point at a different server. See `.env.example`.
@@ -121,7 +121,7 @@ Backend/
 │   ├── error_logging.py     Error capture into the error_log table
 │   ├── error_middleware.py
 │   ├── models/              Database tables (user, training_session, session_entry, technique, auth_token, ...)
-│   └── routers/             Endpoints: auth, admin, admin_tasks, users, sessions, errors
+│   └── routers/             Endpoints: auth, admin, admin_tasks, coach, users, sessions, voice, errors
 ├── sql/error_queries.sql    Handy queries for reading error logs
 ├── uploads/                 Profile pictures (created automatically, not in git)
 ├── AUTH.md                  Login and password reset details
@@ -132,7 +132,7 @@ Mobile/
 ├── App.tsx                  Entry: shows login or home depending on login state
 ├── src/
 │   ├── auth/AuthContext.tsx Login state and sign in / out / reset actions
-│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, LogSessionScreen, ProfileScreen, SettingsScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
+│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, LogSessionScreen, StudentsScreen, ProfileScreen, SettingsScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
 │   ├── components/          Avatar, WeekWidget, AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
 │   ├── navigation/          menuItems.ts: the sections in the main menu
 │   ├── sessions/            Training sessions: types and SessionsContext (offline-first store)
@@ -144,6 +144,25 @@ Mobile/
 └── AGENTS.md                Notes for AI coding assistants working on the app
 ```
 
+## Coaches
+
+There are three kinds of user: **User** (logs their own training), **Coach** and **Admin**. An admin makes someone a coach in **Menu → Admin → Users → (person) → Role → Coach**.
+
+A coach's **students** are everyone whose profile **gym** matches the coach's gym (capitals and extra spaces don't matter). Coaches get **Menu → Coach → Students**, where they can:
+
+- see each student's sessions: what went right and wrong, subs, techniques and what they're working on
+- **promote** them: change belt and stripes
+- leave a **note** on any session. The student sees it as **From your coach** on that session, with a marker on the home page.
+
+Admins can do everything a coach can, for every user. The server enforces the gym rule, so a coach can't see or change anyone at another gym.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /coach/students` | Your students, with sessions in the last 30 days and when they last trained |
+| `GET /coach/students/{id}/sessions` | A student's sessions, including notes |
+| `PATCH /coach/students/{id}/rank` | Set belt and stripes `{belt_rank, stripes}` |
+| `PUT` / `DELETE /coach/sessions/{id}/note` | Add, change or remove your note (`{text}`, up to 1000 characters) |
+
 ## Logging a session
 
 Tap **Log a session** on the home page (or in the menu). It's four short pages:
@@ -153,6 +172,7 @@ Tap **Log a session** on the home page (or in the menu). It's four short pages:
 3. **What went wrong**: notes, **what you got submitted with**, and what you'll work on.
 4. **Review**: your score for the day (subs vs taps). Tap **Edit** on any part, then save.
 
+- Every technique has a little **stick-figure icon** (you in red, your partner in grey; swapped when it was done to you). There are 12 pictures (takedown, guard, pass, sweep, mount, side control, back control, armlock, choke, triangle, leg lock, escape), and each technique gets the one that fits, including ones you add yourself. They're drawn in `Mobile/src/sessions/techniqueIcons.ts` (needs `react-native-svg`).
 - Pick techniques by searching, or filter by **position** (standing / top / bottom) and **type** (submission, pass, sweep, escape, takedown, position). Tap again or use **+ / −** to count repeats. Anything not in the list can be added by name.
 - Unfinished logs are kept on the phone, so closing the app mid-log doesn't lose anything.
 - Saving works **offline** and uploads later.

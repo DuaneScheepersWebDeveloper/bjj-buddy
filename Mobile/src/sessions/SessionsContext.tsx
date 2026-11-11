@@ -44,6 +44,9 @@ function applyPending(base: TrainingSession[], pending: OutboxItem[]): TrainingS
     const id = item.path.slice(PATH.length + 1);
     if (item.method === 'PUT') {
       const s = fromDraft({ ...(item.body as SessionDraft), id }, item.createdAt);
+      // Keep your coach's notes while your edit waits to upload.
+      const before = list.find((x) => x.id === id);
+      if (before?.coach_notes?.length) s.coach_notes = before.coach_notes;
       list = [...list.filter((x) => x.id !== id), s];
     } else if (item.method === 'DELETE') {
       list = list.filter((x) => x.id !== id);

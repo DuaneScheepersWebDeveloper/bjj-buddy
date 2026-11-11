@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { radius, space } from '../theme';
 import { makeStyles, useTheme } from '../ThemeContext';
+import { TechniqueIcon } from './TechniqueIcon';
 import {
   CATEGORY_LABEL,
   CATEGORY_ONE,
@@ -122,6 +123,7 @@ export function TechniquePicker({ library, categories, result, entries, onChange
         <View style={styles.selectedList}>
           {selected.map((e) => (
             <View key={e.name} style={styles.selectedRow}>
+              <TechniqueIcon technique={e} size={30} received={result === 'conceded'} />
               <View style={styles.selectedText}>
                 <Text style={styles.selectedName} numberOfLines={2}>{e.name}</Text>
                 <Text style={styles.selectedMeta}>
@@ -220,8 +222,9 @@ export function TechniquePicker({ library, categories, result, entries, onChange
                 pressed && styles.pressed,
               ]}
             >
+              <TechniqueIcon technique={t} size={22} received={result === 'conceded'} />
               <Text style={[styles.chipText, n > 0 && { color: colors.text }]}>
-                {n > 0 ? `${t.name} ×${n}` : `+ ${t.name}`}
+                {n > 0 ? `${t.name} ×${n}` : t.name}
               </Text>
             </Pressable>
           );
@@ -377,6 +380,9 @@ const useStyles = makeStyles((colors) => ({
   filterTextOn: { color: colors.background },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space(2) },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space(2),
     paddingHorizontal: space(3),
     paddingVertical: space(2),
     borderRadius: radius.sm,

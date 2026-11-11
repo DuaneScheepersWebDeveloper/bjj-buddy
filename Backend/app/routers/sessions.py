@@ -19,7 +19,7 @@ from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models.training_model import SessionEntry, Technique, TrainingSession
+from app.models.training_model import SessionEntry, SessionNote, Technique, TrainingSession
 from app.models.user_model import User
 from app.security import get_current_user
 
@@ -122,6 +122,7 @@ class SessionOut(BaseModel):
     entries: list[EntryOut]
     subs_for: int  # submissions you got
     subs_against: int  # times you were submitted
+    coach_notes: list["CoachNoteOut"] = []
     created_at: datetime
     updated_at: datetime
 
@@ -133,7 +134,42 @@ def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _out(s: TrainingSession, entries: list[SessionEntry]) -> SessionOut:
+class CoachNoteOut(BaseModel):
+    coach_id: int
+    coach_name: str
+    text: str
+    updated_at: datetime
+
+
+SessionOut.model_rebuild()
+
+
+def _notes_for(db: Session, session_ids: list[str]) -> dict[str, list[CoachNoteOut]]:
+    """Coaches' notes on these sessions, with each coach's name."""
+    by_session: dict[str, list[CoachNoteOut]] = {sid: [] for sid in session_ids}
+    if session_ids:
+        rows = db.exec(
+            select(SessionNote, User.full_name)
+            .join(User, User.id == SessionNote.coach_id)
+            .where(SessionNote.session_id.in_(session_ids))
+            .order_by(SessionNote.updated_at)
+        ).all()
+        for note, name in rows:
+            by_session[note.session_id].append(
+                CoachNoteOut(coach_id=note.coach_id, coach_name=name, text=note.text, updated_at=note.updated_at)
+            )
+    return by_session
+
+
+def sessions_out(db: Session, sessions: list[TrainingSession]) -> list["SessionOut"]:
+    """Sessions with their techniques and coach notes, ready to send."""
+    ids = [s.id for s in sessions]
+    entries = _entries_for(db, ids)
+    notes = _notes_for(db, ids)
+    return [_out(s, entries[s.id], notes[s.id]) for s in sessions]
+
+
+def _out(s: TrainingSession, entries: list[SessionEntry], notes: Optional[list[CoachNoteOut]] = None) -> SessionOut:
     subs = [e for e in entries if e.category == "submission"]
     return SessionOut(
         id=s.id,
@@ -158,6 +194,7 @@ def _out(s: TrainingSession, entries: list[SessionEntry]) -> SessionOut:
         ],
         subs_for=sum(e.count for e in subs if e.result == "hit"),
         subs_against=sum(e.count for e in subs if e.result == "conceded"),
+        coach_notes=notes or [],
         created_at=s.created_at,
         updated_at=s.updated_at,
     )
@@ -234,8 +271,7 @@ def list_sessions(
         .order_by(TrainingSession.trained_on.desc(), TrainingSession.created_at.desc())
         .limit(limit)
     ).all()
-    entries = _entries_for(db, [s.id for s in sessions])
-    return [_out(s, entries[s.id]) for s in sessions]
+    return sessions_out(db, list(sessions))
 
 
 @router.get("/sessions/{session_id}", response_model=SessionOut)
@@ -243,7 +279,7 @@ def get_session_log(session_id: str, user: User = Depends(get_current_user), db:
     s = _own_session(db, session_id, user)
     if s is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    return _out(s, _entries_for(db, [s.id])[s.id])
+    return sessions_out(db, [s])[0]
 
 
 @router.put("/sessions/{session_id}", response_model=SessionOut)
@@ -295,7 +331,7 @@ def save_session(
         )
     db.commit()
     db.refresh(s)
-    return _out(s, _entries_for(db, [s.id])[s.id])
+    return sessions_out(db, [s])[0]
 
 
 def _fields(body: SessionIn) -> dict:
@@ -308,6 +344,8 @@ def delete_session(session_id: str, user: User = Depends(get_current_user), db: 
     if s is not None:  # already gone counts as success
         for e in db.exec(select(SessionEntry).where(SessionEntry.session_id == s.id)).all():
             db.delete(e)
+        for n in db.exec(select(SessionNote).where(SessionNote.session_id == s.id)).all():
+            db.delete(n)
         db.flush()
         db.delete(s)
         db.commit()

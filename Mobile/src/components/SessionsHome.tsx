@@ -218,6 +218,7 @@ function SessionCard({ session: s, onPress }: { session: TrainingSession; onPres
           <Text style={styles.tag}>{SESSION_TYPE_LABEL[s.session_type]}</Text>
           <Text style={styles.tag}>{formatDuration(s.duration_min)}</Text>
         </View>
+        {s.coach_notes?.length ? <Text style={styles.coachFlag}>● Note from your coach</Text> : null}
         {s.unsynced ? <Text style={styles.unsynced}>● Saved on this phone</Text> : null}
       </View>
       <View style={styles.rowScore}>
@@ -302,6 +303,7 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: 2,
     overflow: 'hidden',
   },
+  coachFlag: { color: '#2E7DD7', fontSize: 12, fontWeight: '700', marginTop: space(2) },
   unsynced: { color: colors.warning, fontSize: 12, fontWeight: '700', marginTop: space(2) },
   rowScore: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
   rowScoreText: { fontSize: 22, fontWeight: '900' },

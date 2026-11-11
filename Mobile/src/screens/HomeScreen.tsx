@@ -19,6 +19,7 @@ import { MainMenu } from '../components/MainMenu';
 import { SectionPlaceholder } from './SectionPlaceholder';
 import { ProfileScreen } from './ProfileScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { StudentsScreen } from './StudentsScreen';
 import { LogSessionScreen } from './LogSessionScreen';
 import { SessionsHome } from '../components/SessionsHome';
 import { SyncStatus } from '../offline/SyncStatus';
@@ -152,6 +153,8 @@ export function HomeScreen() {
             <AdminTasksScreen onBack={() => setSection(null)} />
           ) : section === 'profile' ? (
             <ProfileScreen onBack={() => setSection(null)} />
+          ) : section === 'students' && (user?.role === 'coach' || user?.role === 'admin') ? (
+            <StudentsScreen onBack={() => setSection(null)} />
           ) : section === 'settings' ? (
             <SettingsScreen onBack={() => setSection(null)} />
           ) : section === 'logSession' ? (

@@ -5,7 +5,7 @@ from app.database import get_session
 from app.models.user_model import User
 from app.models.auth_token_model import AuthToken
 from app.models.password_reset_model import PasswordResetCode
-from app.models.training_model import TrainingSession
+from app.models.training_model import SessionNote, TrainingSession
 from app.schemas import UserPublic
 from app.security import get_current_user, hash_password, require_admin
 from app.usernames import clean_username, username_taken
@@ -165,6 +165,9 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), session: Ses
         session.delete(token)
     for code in session.exec(select(PasswordResetCode).where(PasswordResetCode.user_id == user.id)).all():
         session.delete(code)
+    # Notes they left as a coach on other people's sessions.
+    for note in session.exec(select(SessionNote).where(SessionNote.coach_id == user.id)).all():
+        session.delete(note)
     session.flush()
     session.delete(user)
     session.commit()

@@ -61,3 +61,16 @@ class SessionEntry(SQLModel, table=True):
     position: str
     result: str  # hit | conceded
     count: int = Field(default=1)
+
+
+class SessionNote(SQLModel, table=True):
+    """A coach's note on a student's session (one note per coach per session)."""
+
+    __tablename__ = "session_note"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: str = Field(foreign_key="training_session.id", index=True, max_length=40)
+    coach_id: int = Field(foreign_key="user.id", index=True)
+    text: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

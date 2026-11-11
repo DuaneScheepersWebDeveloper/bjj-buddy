@@ -186,6 +186,7 @@ export function AdminUsersScreen({ onBack }: { onBack: () => void }) {
                 <View style={styles.nameLine}>
                   <Text style={styles.name} numberOfLines={1}>{u.full_name}</Text>
                   {u.role === 'admin' ? <Text style={styles.adminBadge}>ADMIN</Text> : null}
+                  {u.role === 'coach' ? <Text style={[styles.adminBadge, styles.coachBadge]}>COACH</Text> : null}
                 </View>
                 <Text style={styles.email} numberOfLines={1}>
                   {u.username ? `@${u.username} · ${u.email}` : u.email}
@@ -298,6 +299,7 @@ const useStyles = makeStyles((colors) => ({
   rowText: { flex: 1, marginRight: space(3) },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: space(2) },
   name: { color: colors.text, fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  coachBadge: { color: '#2E7DD7', borderColor: '#2E7DD7' },
   adminBadge: {
     color: colors.accent,
     fontSize: 10,

@@ -48,7 +48,11 @@ export type TrainingSession = SessionDraft & {
   updated_at: string;
   /** Saved on this phone, not uploaded yet. */
   unsynced?: boolean;
+  /** Notes your coach left on this session. */
+  coach_notes?: CoachNote[];
 };
+
+export type CoachNote = { coach_id: number; coach_name: string; text: string; updated_at: string };
 
 export const ATTIRE_LABEL: Record<Attire, string> = { gi: 'Gi', nogi: 'No-Gi' };
 

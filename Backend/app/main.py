@@ -7,14 +7,32 @@ from app.database import create_db_and_tables
 from app.error_logging import setup_error_logging
 from app.error_middleware import ErrorLoggingMiddleware, register_exception_handlers
 from app.idempotency import IdempotencyMiddleware, purge_old_records
-from app.routers import admin, admin_tasks, auth, users, sessions, voice, errors
+from app.routers import admin, admin_tasks, auth, coach, users, sessions, voice, errors
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
     setup_error_logging()
     purge_old_records()
+    _report_voice_setup()
     yield
+
+
+def _report_voice_setup():
+    """Say in the terminal whether voice notes are on, without printing the secret key."""
+    key = (settings.openai_api_key or "").strip()
+    if not key:
+        print("Voice notes: OFF. No OPENAI_API_KEY found in Backend/.env", flush=True)
+        return
+    problems = []
+    if not key.startswith("sk-"):
+        problems.append("it should start with 'sk-'")
+    if len(key) < 100 and key.startswith("sk-proj-"):
+        problems.append("it looks cut short (project keys are about 164 characters)")
+    if any(c in key for c in " '\""):
+        problems.append("it contains spaces or quotes")
+    note = f" (check it: {'; '.join(problems)})" if problems else ""
+    print(f"Voice notes: ON. Key {key[:8]}...{key[-4:]}, {len(key)} characters{note}", flush=True)
 
 app = FastAPI(
     title="BJJ Buddy API",
@@ -27,6 +45,7 @@ app.include_router(admin.router)
 app.include_router(admin_tasks.router)
 app.include_router(users.router)
 app.include_router(sessions.router)
+app.include_router(coach.router)
 app.include_router(voice.router)
 app.include_router(errors.router)
 

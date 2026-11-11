@@ -6,6 +6,7 @@ import { useSessions } from '../sessions/SessionsContext';
 import { newId } from '../offline/outbox';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { TechniquePicker } from '../components/TechniquePicker';
+import { TechniqueIcon } from '../components/TechniqueIcon';
 import { VoiceNote, type VoiceField } from '../components/VoiceNote';
 import { CalendarPicker } from '../components/CalendarPicker';
 import { radius, space } from '../theme';
@@ -80,7 +81,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
     if (editId) {
       if (!editing) return; // wait for sessions to load
       started.current = true;
-      const { subs_for, subs_against, updated_at, unsynced, ...rest } = editing;
+      const { subs_for, subs_against, updated_at, unsynced, coach_notes, ...rest } = editing;
       setDraft({ ...rest, entries: rest.entries.map((e) => ({ ...e })) });
       setStep(3); // straight to the review, where every part has an Edit button
       return;
@@ -425,6 +426,18 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             <Score subsFor={subsFor} subsAgainst={subsAgainst} />
           </View>
 
+          {editing?.coach_notes?.length ? (
+            <View style={[styles.card, styles.coachCard]}>
+              <Text style={styles.coachTitle}>From your coach</Text>
+              {editing.coach_notes.map((n) => (
+                <View key={n.coach_id} style={styles.coachNote}>
+                  <Text style={styles.coachText}>{n.text}</Text>
+                  <Text style={styles.coachBy}>— {n.coach_name}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <ReviewCard title="Details" onEdit={() => goTo(0)}>
             <ReviewLine label="When" value={dayLabel(draft.trained_on)} />
             <ReviewLine label="Where" value={draft.location?.trim() || 'Not set'} muted={!draft.location?.trim()} />
@@ -755,13 +768,16 @@ function EntryChips({
       <View style={styles.chipRow}>
         {list.map((e) => (
           <View key={e.name} style={[styles.entryChip, { borderColor: color }]}>
-            <Text style={styles.entryChipText}>
-              {e.name}
-              {e.count > 1 ? ` ×${e.count}` : ''}
-            </Text>
-            <Text style={styles.entryChipMeta}>
-              {e.category === 'submission' ? POSITION_LABEL[e.position] : `${CATEGORY_ONE[e.category]} · ${POSITION_LABEL[e.position]}`}
-            </Text>
+            <TechniqueIcon technique={e} size={26} received={e.result === 'conceded'} />
+            <View>
+              <Text style={styles.entryChipText}>
+                {e.name}
+                {e.count > 1 ? ` ×${e.count}` : ''}
+              </Text>
+              <Text style={styles.entryChipMeta}>
+                {e.category === 'submission' ? POSITION_LABEL[e.position] : `${CATEGORY_ONE[e.category]} · ${POSITION_LABEL[e.position]}`}
+              </Text>
+            </View>
           </View>
         ))}
       </View>
@@ -891,6 +907,11 @@ const useStyles = makeStyles((colors) => ({
   notesCount: { color: colors.textMuted, fontSize: 12, textAlign: 'right', marginTop: space(1) },
 
   scoreCard: { paddingVertical: space(5) },
+  coachCard: { borderColor: '#2E7DD7', borderWidth: 1.5 },
+  coachTitle: { color: '#2E7DD7', fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: space(2) },
+  coachNote: { marginTop: space(1), marginBottom: space(2) },
+  coachText: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  coachBy: { color: colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: space(1) },
   score: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space(6) },
   scoreSide: { alignItems: 'center', minWidth: 70 },
   scoreNum: { fontSize: 44, fontWeight: '900', lineHeight: 50 },
@@ -906,7 +927,7 @@ const useStyles = makeStyles((colors) => ({
   reviewValue: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
   reviewText: { color: colors.text, fontSize: 15, lineHeight: 22 },
   reviewSub: { color: colors.textMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.6, marginTop: space(4), marginBottom: space(2), textTransform: 'uppercase' },
-  entryChip: { borderWidth: 1.5, borderRadius: radius.sm, paddingHorizontal: space(3), paddingVertical: space(1) + 2 },
+  entryChip: { flexDirection: 'row', alignItems: 'center', gap: space(2), borderWidth: 1.5, borderRadius: radius.sm, paddingHorizontal: space(3), paddingVertical: space(1) + 2 },
   entryChipText: { color: colors.text, fontSize: 14, fontWeight: '700' },
   entryChipMeta: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
 

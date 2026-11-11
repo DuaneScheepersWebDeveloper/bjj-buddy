@@ -57,7 +57,7 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
             <Text style={styles.userName} numberOfLines={1}>{user?.full_name}</Text>
             <Text style={styles.userRank}>
               {formatRank(user?.belt_rank, user?.stripes)}
-              {user?.role === 'admin' ? ' · Admin' : ''}
+              {user?.role === 'admin' ? ' · Admin' : user?.role === 'coach' ? ' · Coach' : ''}
             </Text>
           </View>
         </View>
@@ -74,12 +74,13 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
           {menuItemsFor(user?.role).map((item, i, all) => {
             const isActive = item.id === active;
             const firstAdmin = item.adminOnly && !all[i - 1]?.adminOnly;
+            const firstCoach = item.coachOnly && !all[i - 1]?.coachOnly;
             return (
               <View key={item.id}>
-                {firstAdmin ? (
+                {firstAdmin || firstCoach ? (
                   <View style={styles.groupHeader}>
                     <View style={styles.divider} />
-                    <Text style={styles.groupLabel}>ADMIN</Text>
+                    <Text style={styles.groupLabel}>{firstAdmin ? 'ADMIN' : 'COACH'}</Text>
                   </View>
                 ) : null}
                 <Pressable

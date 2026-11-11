@@ -49,7 +49,7 @@ export type User = {
   belt_rank: string;
   /** Stripes on the current belt, 0-4. */
   stripes: number;
-  role: 'user' | 'admin';
+  role: 'user' | 'coach' | 'admin';
   is_active: boolean;
   created_at: string;
   gym: string | null;

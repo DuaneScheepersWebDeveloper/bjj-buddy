@@ -4,8 +4,10 @@ from datetime import date, datetime, timezone
 
 # The two kinds of user. Admins can manage other users (and more, later on).
 ROLE_USER = "user"
+# Coaches can see and promote students at their own gym, and leave notes on their sessions.
+ROLE_COACH = "coach"
 ROLE_ADMIN = "admin"
-ROLES = (ROLE_USER, ROLE_ADMIN)
+ROLES = (ROLE_USER, ROLE_COACH, ROLE_ADMIN)
 
 # Adult belt ranks, lowest to highest.
 BELTS = ("White", "Blue", "Purple", "Brown", "Black")
@@ -46,3 +48,8 @@ class User(SQLModel, table=True):
     @property
     def is_admin(self) -> bool:
         return self.role == ROLE_ADMIN
+
+    @property
+    def is_coach(self) -> bool:
+        """Coaches, and admins (who can do everything a coach can)."""
+        return self.role in (ROLE_COACH, ROLE_ADMIN)

@@ -144,6 +144,7 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
         <Segmented
           options={[
             { value: 'user', label: 'User' },
+            { value: 'coach', label: 'Coach' },
             { value: 'admin', label: 'Admin' },
           ]}
           value={role}
@@ -151,7 +152,13 @@ export function AdminEditUser({ user, onCancel, onSaved }: Props) {
           disabled={isMe}
         />
         <Text style={styles.note}>
-          {isMe ? "You can't change your own role." : 'Admins can manage other users from this page.'}
+          {isMe
+            ? "You can't change your own role."
+            : role === 'coach'
+              ? 'Coaches can see, promote and leave notes for students at their gym.'
+              : role === 'admin'
+                ? 'Admins can manage every user, and coach everyone.'
+                : 'Logs their own training.'}
         </Text>
 
         <Text style={styles.label}>Status</Text>

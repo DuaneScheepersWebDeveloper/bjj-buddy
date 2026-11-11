@@ -2,7 +2,7 @@ from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine, Session, select
 from app.config import settings
 from app.models.user_model import User
-from app.models.training_model import SessionEntry, Technique, TrainingSession  # noqa: F401 (registers tables)
+from app.models.training_model import SessionEntry, SessionNote, Technique, TrainingSession  # noqa: F401 (registers tables)
 from app.models.error_log_model import ErrorLog  # noqa: F401 (registers table)
 from app.models.auth_token_model import AuthToken  # noqa: F401 (registers table)
 from app.models.password_reset_model import PasswordResetCode  # noqa: F401 (registers table)
@@ -32,6 +32,7 @@ _ADD_MISSING_COLUMNS = [
     # Built-in techniques have unique names; each user's own techniques are unique per user.
     """CREATE UNIQUE INDEX IF NOT EXISTS ix_technique_name_owner ON technique (lower(name), coalesce(user_id, 0))""",
     """CREATE INDEX IF NOT EXISTS ix_training_session_user_day ON training_session (user_id, trained_on DESC)""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS ix_session_note_once ON session_note (session_id, coach_id)""",
 ]
 
 def create_db_and_tables():

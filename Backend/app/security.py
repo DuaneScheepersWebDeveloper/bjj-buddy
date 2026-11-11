@@ -149,3 +149,10 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can do this")
     return user
+
+
+def require_coach(user: User = Depends(get_current_user)) -> User:
+    """Use as a dependency on endpoints only coaches (and admins) may call."""
+    if not user.is_coach:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only coaches can do this")
+    return user

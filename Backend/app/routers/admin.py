@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models.auth_token_model import AuthToken
 from app.models.password_reset_model import PasswordResetCode
-from app.models.user_model import BELTS, MAX_STRIPES, ROLE_ADMIN, User
+from app.models.user_model import BELTS, MAX_STRIPES, ROLE_ADMIN, ROLE_COACH, User
 from app.schemas import UserPublic
 from app.security import require_admin
 from app.usernames import clean_username, username_taken
@@ -29,7 +29,7 @@ class StatusUpdate(BaseModel):
 
 
 class RoleUpdate(BaseModel):
-    role: Literal["user", "admin"]
+    role: Literal["user", "coach", "admin"]
 
 
 class AdminUserUpdate(BaseModel):
@@ -40,7 +40,7 @@ class AdminUserUpdate(BaseModel):
     username: Optional[str] = None
     belt_rank: Optional[str] = None
     stripes: Optional[int] = Field(default=None, ge=0, le=MAX_STRIPES)
-    role: Optional[Literal["user", "admin"]] = None
+    role: Optional[Literal["user", "coach", "admin"]] = None
     is_active: Optional[bool] = None
 
     @field_validator("full_name")
@@ -102,7 +102,7 @@ def _end_sessions(db: Session, user_id: int) -> None:
 def list_users(
     search: Optional[str] = Query(default=None, description="Matches name, email or username"),
     active: Optional[bool] = Query(default=None, description="Only active (true) or inactive (false) users"),
-    role: Optional[Literal["user", "admin"]] = None,
+    role: Optional[Literal["user", "coach", "admin"]] = None,
     db: Session = Depends(get_session),
 ):
     q = select(User)
@@ -214,4 +214,11 @@ def summary(db: Session = Depends(get_session)):
     total = db.exec(select(func.count()).select_from(User)).one()
     active = db.exec(select(func.count()).select_from(User).where(User.is_active == True)).one()  # noqa: E712
     admins = db.exec(select(func.count()).select_from(User).where(User.role == ROLE_ADMIN)).one()
-    return {"total_users": total, "active_users": active, "inactive_users": total - active, "admins": admins}
+    coaches = db.exec(select(func.count()).select_from(User).where(User.role == ROLE_COACH)).one()
+    return {
+        "total_users": total,
+        "active_users": active,
+        "inactive_users": total - active,
+        "admins": admins,
+        "coaches": coaches,
+    }
