@@ -5,6 +5,7 @@ import { installGlobalErrorHandler } from './src/lib/errorReporter';
 import { AuthProvider, useAuth } from './src/auth/AuthContext';
 import { OfflineSyncProvider } from './src/offline/OfflineSync';
 import { SessionsProvider } from './src/sessions/SessionsContext';
+import { FocusProvider } from './src/focus/FocusContext';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BeltLoader } from './src/components/BeltLoader';
@@ -50,7 +51,9 @@ export default function App() {
         <AuthProvider>
           <OfflineSyncProvider>
             <SessionsProvider>
-              <Root />
+              <FocusProvider>
+                <Root />
+              </FocusProvider>
             </SessionsProvider>
           </OfflineSyncProvider>
         </AuthProvider>

@@ -7,7 +7,7 @@ from app.database import create_db_and_tables
 from app.error_logging import setup_error_logging
 from app.error_middleware import ErrorLoggingMiddleware, register_exception_handlers
 from app.idempotency import IdempotencyMiddleware, purge_old_records
-from app.routers import admin, admin_tasks, auth, coach, users, sessions, voice, errors
+from app.routers import admin, admin_tasks, auth, coach, fitness, focus, users, sessions, voice, errors
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,6 +46,8 @@ app.include_router(admin_tasks.router)
 app.include_router(users.router)
 app.include_router(sessions.router)
 app.include_router(coach.router)
+app.include_router(fitness.router)
+app.include_router(focus.router)
 app.include_router(voice.router)
 app.include_router(errors.router)
 

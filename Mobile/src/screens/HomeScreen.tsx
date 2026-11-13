@@ -20,7 +20,10 @@ import { SectionPlaceholder } from './SectionPlaceholder';
 import { ProfileScreen } from './ProfileScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { StudentsScreen } from './StudentsScreen';
+import { FitnessScreen } from './FitnessScreen';
 import { LogSessionScreen } from './LogSessionScreen';
+import { QuickLogScreen } from './QuickLogScreen';
+import { FocusScreen } from './FocusScreen';
 import { SessionsHome } from '../components/SessionsHome';
 import { SyncStatus } from '../offline/SyncStatus';
 import { AdminUsersScreen } from './AdminUsersScreen';
@@ -44,14 +47,17 @@ export function HomeScreen() {
   const [section, setSection] = useState<SectionId | null>(null);
   // Which session Log a session should open for editing (null = log a new one).
   const [editSessionId, setEditSessionId] = useState<string | null>(null);
+  // New sessions open in Quick Log; the 4-step log is for "Detailed log" and for editing.
+  const [fullLog, setFullLog] = useState(false);
   // A page can take over the Android back button (e.g. Log a session steps back a page).
   const sectionBack = useRef<(() => boolean) | null>(null);
   const setSectionBack = useCallback((fn: (() => boolean) | null) => {
     sectionBack.current = fn;
   }, []);
   const scrollToTop = useCallback(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), []);
-  const openLog = useCallback((id: string | null) => {
+  const openLog = useCallback((id: string | null, full = false) => {
     setEditSessionId(id);
+    setFullLog(full || id != null);
     setSection('logSession');
   }, []);
 
@@ -155,11 +161,22 @@ export function HomeScreen() {
             <ProfileScreen onBack={() => setSection(null)} />
           ) : section === 'students' && (user?.role === 'coach' || user?.role === 'admin') ? (
             <StudentsScreen onBack={() => setSection(null)} />
+          ) : section === 'statsFitness' ? (
+            <FitnessScreen onBack={() => setSection(null)} />
           ) : section === 'settings' ? (
             <SettingsScreen onBack={() => setSection(null)} />
+          ) : section === 'focus' ? (
+            <FocusScreen onBack={() => setSection(null)} onLog={() => openLog(null)} />
+          ) : section === 'logSession' && !fullLog ? (
+            <QuickLogScreen
+              onDone={() => setSection(null)}
+              onFullLog={() => openLog(null, true)}
+              onFocus={() => setSection('focus')}
+              scrollToTop={scrollToTop}
+            />
           ) : section === 'logSession' ? (
             <LogSessionScreen
-              key={editSessionId ?? 'new'}
+              key={editSessionId ?? 'new-full'}
               editId={editSessionId}
               onDone={() => setSection(null)}
               scrollToTop={scrollToTop}
@@ -182,7 +199,12 @@ export function HomeScreen() {
                 <BeltBadge belt={rank} stripes={stripes} size="md" />
               </View>
 
-              <SessionsHome onLog={() => openLog(null)} onOpen={(id) => openLog(id)} />
+              <SessionsHome
+                onLog={() => openLog(null)}
+                onFullLog={() => openLog(null, true)}
+                onOpen={(id) => openLog(id)}
+                onFocus={() => setSection('focus')}
+              />
             </>
           )}
         </View>
@@ -199,7 +221,10 @@ export function HomeScreen() {
         active={section}
         onClose={() => closeMenu()}
         onSelect={(id) => {
-          if (id === 'logSession') setEditSessionId(null);
+          if (id === 'logSession') {
+            setEditSessionId(null);
+            setFullLog(false);
+          }
           setSection(id);
           closeMenu();
         }}

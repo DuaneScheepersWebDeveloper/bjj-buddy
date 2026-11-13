@@ -1,0 +1,6 @@
+# Install with: pip install -r requirements.txt
+fastapi
+uvicorn[standard]
+sqlmodel
+pydantic-settings
+psycopg[binary]

@@ -3,6 +3,9 @@ import { Pressable, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../auth/AuthContext';
 import { useSessions } from '../sessions/SessionsContext';
+import { useFocus } from '../focus/FocusContext';
+import { FocusCard, InsightCard } from './FocusCard';
+import { focusProgress, insights as findInsights } from '../insights/insights';
 import { WeekWidget } from './WeekWidget';
 import { startOfWeek, weekCounts, weekStreak } from '../lib/week';
 import { radius, space } from '../theme';
@@ -35,13 +38,27 @@ function weekTitle(offset: number, monday: Date): string {
 }
 
 /**
- * The training part of the home page: a big "Log a session" button, a week of training
- * (tap a day with a session to see it; ‹ › to look at earlier weeks).
+ * The dashboard: your focus at the top (the loop the app is built around), a big
+ * "Log a session" button (Quick Log), your week (tap a day to see it), then one or two
+ * insights from your own logs.
  */
-export function SessionsHome({ onLog, onOpen }: { onLog: () => void; onOpen: (id: string) => void }) {
+export function SessionsHome({
+  onLog,
+  onFullLog,
+  onOpen,
+  onFocus,
+}: {
+  onLog: () => void;
+  onFullLog: () => void;
+  onOpen: (id: string) => void;
+  onFocus: () => void;
+}) {
   const styles = useStyles();
   const { user } = useAuth();
   const { sessions, ready } = useSessions();
+  const { active: focus } = useFocus();
+  const progress = useMemo(() => (focus ? focusProgress(focus, sessions) : null), [focus, sessions]);
+  const tips = useMemo(() => findInsights(sessions).slice(0, 2), [sessions]);
   const userId = user?.id ?? 0;
   const [goal, setGoal] = useState(DEFAULT_GOAL);
   const [offset, setOffset] = useState(0);
@@ -91,6 +108,8 @@ export function SessionsHome({ onLog, onOpen }: { onLog: () => void; onOpen: (id
 
   return (
     <View>
+      <FocusCard focus={focus} progress={progress} onPress={onFocus} />
+
       <Pressable
         onPress={onLog}
         accessibilityRole="button"
@@ -99,8 +118,11 @@ export function SessionsHome({ onLog, onOpen }: { onLog: () => void; onOpen: (id
         <Text style={styles.logPlus}>+</Text>
         <View>
           <Text style={styles.logTitle}>Log a session</Text>
-          <Text style={styles.logSub}>What went right, what went wrong, your subs</Text>
+          <Text style={styles.logSub}>Tap or talk. Under a minute.</Text>
         </View>
+      </Pressable>
+      <Pressable onPress={onFullLog} hitSlop={8} accessibilityRole="button" style={styles.fullLog}>
+        <Text style={styles.fullLogText}>Detailed log (4 steps) ›</Text>
       </Pressable>
 
       {/* Week picker */}
@@ -188,6 +210,15 @@ export function SessionsHome({ onLog, onOpen }: { onLog: () => void; onOpen: (id
         </View>
       ) : null}
 
+      {tips.length ? (
+        <View style={styles.insights}>
+          <Text style={styles.insightsTitle}>Noticed lately</Text>
+          {tips.map((t) => (
+            <InsightCard key={t.id} insight={t} />
+          ))}
+        </View>
+      ) : null}
+
       {ready && sessions.length === 0 ? (
         <View style={[styles.card, styles.emptyCard]}>
           <Text style={styles.emptyTitle}>No sessions yet</Text>
@@ -244,8 +275,12 @@ const useStyles = makeStyles((colors) => ({
     borderRadius: radius.lg,
     paddingVertical: space(4),
     paddingHorizontal: space(5),
-    marginBottom: space(5),
+    marginBottom: space(2),
   },
+  fullLog: { alignSelf: 'center', paddingVertical: space(1), marginBottom: space(4) },
+  fullLogText: { color: colors.textMuted, fontSize: 13, fontWeight: '700' },
+  insights: { marginTop: space(2) },
+  insightsTitle: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: space(3) },
   logBtnPressed: { backgroundColor: colors.accentPressed },
   logPlus: { color: colors.white, fontSize: 34, fontWeight: '300', lineHeight: 38 },
   logTitle: { color: colors.white, fontSize: 19, fontWeight: '900' },

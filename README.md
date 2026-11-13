@@ -28,10 +28,10 @@ BJJ Buddy/
 cd Backend
 python -m venv .venv
 source .venv/Scripts/activate        # macOS/Linux: source .venv/bin/activate
-pip install fastapi "uvicorn[standard]" sqlmodel pydantic-settings "psycopg[binary]"
+pip install -r requirements.txt
 ```
 
-Create `Backend/.env`:
+Copy `Backend/.env.example` to `Backend/.env` and fill it in:
 
 ```env
 DATABASE_URL=postgresql://postgres:dev@localhost:5432/bjjbuddy
@@ -115,13 +115,13 @@ Backend/
 │   ├── idempotency.py       Makes outbox retries safe (no duplicates)
 │   ├── make_admin.py        Command to make a user an admin
 │   ├── techniques_seed.py   Built-in BJJ technique library
-│   ├── voice.py             Voice notes: speech to text, then tidy up (OpenAI)
+│   ├── voice.py             Voice notes and voice dump: speech to text, then tidy up / fill in the log (OpenAI)
 │   ├── usernames.py         Username rules (format, reserved names, uniqueness)
 │   ├── schemas.py           Shapes of data the API returns
 │   ├── error_logging.py     Error capture into the error_log table
 │   ├── error_middleware.py
 │   ├── models/              Database tables (user, training_session, session_entry, technique, auth_token, ...)
-│   └── routers/             Endpoints: auth, admin, admin_tasks, coach, users, sessions, voice, errors
+│   └── routers/             Endpoints: auth, admin, admin_tasks, coach, fitness, focus, users, sessions, voice, errors
 ├── sql/error_queries.sql    Handy queries for reading error logs
 ├── uploads/                 Profile pictures (created automatically, not in git)
 ├── AUTH.md                  Login and password reset details
@@ -132,17 +132,38 @@ Mobile/
 ├── App.tsx                  Entry: shows login or home depending on login state
 ├── src/
 │   ├── auth/AuthContext.tsx Login state and sign in / out / reset actions
-│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, LogSessionScreen, StudentsScreen, ProfileScreen, SettingsScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
-│   ├── components/          Avatar, WeekWidget, AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
+│   ├── screens/             LoginScreen, ForgotPasswordScreen, HomeScreen, QuickLogScreen, LogSessionScreen, FocusScreen, StudentsScreen, FitnessScreen, ProfileScreen, SettingsScreen, AdminUsersScreen, AdminEditUser, AdminTasksScreen, SectionPlaceholder
+│   ├── components/          FocusCard (+ InsightCard), Reflection (focus check, energy, partners), VoiceNote, TechniquePicker, Avatar, WeekWidget, AuthLayout, MainMenu, HamburgerButton, TextField, PrimaryButton, BeltMark, ErrorBoundary
 │   ├── navigation/          menuItems.ts: the sections in the main menu
 │   ├── sessions/            Training sessions: types and SessionsContext (offline-first store)
+│   ├── focus/               FocusContext: your one active focus (offline-first store)
+│   ├── insights/            insights.ts: rule-based insights, focus progress, feedback after logging (pure functions)
 │   ├── offline/             Offline outbox: save changes without signal, upload later
 │   ├── data/                countries.ts (profile), techniques.ts (offline copy of the technique library)
-│   ├── lib/                 api.ts (talks to the backend), week.ts (weekly counts/streaks), tokenStorage.ts, errorReporter.ts
+│   ├── lib/                 api.ts (talks to the backend), exportData.ts (JSON / CSV export), week.ts (weekly counts/streaks), tokenStorage.ts, errorReporter.ts
 │   ├── theme.ts             Light and dark colour palettes, belt colours, spacing
 │   └── ThemeContext.tsx     Light/dark mode: ThemeProvider, useTheme(), makeStyles()
 └── AGENTS.md                Notes for AI coding assistants working on the app
 ```
+
+How the pieces fit together, and why: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Stats
+
+**Menu → Stats** opens into two pages:
+
+- **Fitness**
+  - **Water today:** tap **+ Glass** (250 ml) or **+ Bottle** (500 ml), or **−** to undo. It shows progress to a daily goal (default 2.5 L, change it with **Goal ✎**), plus yesterday's total and your average over the last week.
+  - **Weight:** log today's weight (− / + steps of 0.1 kg, or type it in). See a chart for the last 30 days, 3 months or year, and your change over 30 days. You can set an optional **target** (shown as a dashed line), and delete any entry from **Recent**.
+  - Both work offline and upload later. The water goal and target weight are remembered on the phone.
+- **BJJ progress**: a placeholder for now (ideas: sub tally, most-used techniques, Gi vs No-Gi, mat hours).
+
+| Endpoint | What it does |
+|---|---|
+| `GET /fitness/weights?days=365` | Your weigh-ins, oldest first |
+| `PUT` / `DELETE /fitness/weights/{YYYY-MM-DD}` | Log (`{weight_kg}`, 20–300) or delete that day's weight |
+| `GET /fitness/water?days=30` | Water per day |
+| `PUT /fitness/water/{YYYY-MM-DD}` | That day's total (`{ml}`; 0 clears it) |
 
 ## Coaches
 
@@ -163,13 +184,48 @@ Admins can do everything a coach can, for every user. The server enforces the gy
 | `PATCH /coach/students/{id}/rank` | Set belt and stripes `{belt_rank, stripes}` |
 | `PUT` / `DELETE /coach/sessions/{id}/note` | Add, change or remove your note (`{text}`, up to 1000 characters) |
 
+## Your focus (the practice loop)
+
+The app is built around one loop: **pick ONE thing → work on it → log it → review it → pick the next thing.**
+
+- **Menu → Focus** (or the **Your focus** card at the top of the home page): name one specific thing, e.g. "Knee-cut pass". Ideas are suggested from what's been catching you lately. Choose how many sessions before you review it (default 8).
+- Each time you log a session, **Worked on my focus** is ticked for you (untick it if you didn't).
+- The card shows your reps (e.g. **3/8**), a progress bar and one line: your last "next time" note, how many sessions to go, **time to review** when you hit the target, or a nudge if you haven't worked on it in 10 days.
+- **Review or change**: **Got it** or **Park it** (add what you learned, then pick the next focus), or **Keep going** (adds 4 more sessions). Old focuses stay under **Past focuses**.
+- Only one focus is active at a time. Starting a new one ends the old one (the server enforces this too).
+
+| Endpoint | What it does |
+|---|---|
+| `GET /focus` | Your focuses, active first |
+| `PUT /focus/{id}` | Start, change or end one (the app makes the id, so offline retries are safe) |
+| `DELETE /focus/{id}` | Remove one |
+
+## Insights
+
+Under **Noticed lately** on the home page you get the one or two most useful observations from your own logs, worked out on the phone (no AI, works offline). Each rule waits for enough data before it says anything:
+
+- **Partners**: a partner type that taps you far more than usual (e.g. "Bigger partners are your hardest rolls: tapped in 7 of 9").
+- **Energy**: three tiring sessions in a row, or you get tapped much more on tired days.
+- **Cold techniques**: something you used to hit that you haven't in 3+ weeks.
+- **Where you get tapped**: e.g. most taps happen from underneath.
+- **Neglected**: no sweeps (or passes, escapes…) logged in 30 days.
+- **Streak**: weeks in a row with at least one session, and a nudge when a streak is at risk.
+
+Right after saving a session you get a few lines of feedback: your focus rep count, firsts and comebacks ("Armbar is back after 24 days"), and a new streak. Rules live in `Mobile/src/insights/insights.ts`; adding one is a small function.
+
 ## Logging a session
 
-Tap **Log a session** on the home page (or in the menu). It's four short pages:
+**Log a session** opens **Quick log**: the whole session on one screen, built to take under a minute.
+
+- **Talk it through** (voice dump): say how it went in one go: what you worked on, what worked and didn't, who you rolled with, how you felt, one thing to change. It fills in the form (techniques matched to the library, partners, energy, focus); you check it and save. Needs voice notes set up (below). Uses `POST /voice/session`.
+- **Or tap**: where / how long / Gi or No-Gi come from your last session (**Change** to edit them); **Worked on my focus**; what worked / what didn't; subs you got and what tapped you (your usual ones first); **Energy** (1–5); **Who did you roll with?** (a name, or just traits like Bigger / Higher belt, and who tapped whom; your regulars are one tap); and **One thing to change next time**.
+- **Full log ›** moves everything you've entered into the detailed log.
+
+The detailed log (**Detailed log (4 steps)** on the home page, and always used for editing) has four short pages:
 
 1. **Details**: when (**Today**, or **Pick a day** for a calendar; days you've already logged have a dot), where (your recent places are one tap away), how long, Gi or No-Gi, and class / open mat / private / competition.
 2. **What went right**: notes first, then the **subs you got** (with a counter) and other techniques that worked.
-3. **What went wrong**: notes, **what you got submitted with**, and what you'll work on.
+3. **What went wrong**: notes, **what you got submitted with**, what you'll work on, and the **Reflection** (focus, energy, partners, one thing to change).
 4. **Review**: your score for the day (subs vs taps). Tap **Edit** on any part, then save.
 
 - Every technique has a little **stick-figure icon** (you in red, your partner in grey; swapped when it was done to you). There are 12 pictures (takedown, guard, pass, sweep, mount, side control, back control, armlock, choke, triangle, leg lock, escape), and each technique gets the one that fits, including ones you add yourself. They're drawn in `Mobile/src/sessions/techniqueIcons.ts` (needs `react-native-svg`).
@@ -210,8 +266,11 @@ Each voice note prints a line in the API terminal showing how long each step too
 | `GET /techniques` | The technique library plus your own techniques |
 | `GET /voice/status` | Whether voice notes are set up, and the longest recording allowed |
 | `POST /voice/notes` | A recording in, clear written notes out (`{audio_base64, field}`) |
+| `POST /voice/session` | Voice dump: a recording in, the Quick Log fields out (`{audio_base64, focus, partners, today}`) |
 
 ## Light and dark mode
+
+**Your data:** **Menu → Settings → Your data** exports everything: **CSV** (one row per session, opens in Excel / Google Sheets) or **JSON** (everything, for backups). On a phone it opens the share sheet (save to Drive / Files or email it); in a browser it downloads.
 
 **Menu → Settings → Appearance** has three choices: **Light**, **Dark** (the default) and **System**, which
 follows the phone's own setting and switches automatically. The choice is saved on the device
@@ -243,7 +302,7 @@ The app keeps working without signal (e.g. at the gym):
 - **Saving changes**: anything sent with `sendOrQueue()` (from `src/offline/OfflineSync.tsx`) is tried
   straight away. If the phone is offline, it's saved in an **outbox** on the phone (AsyncStorage) instead.
   Profile edits, logged sessions and the admin **Tasks** list use it.
-- **Uploading later**: the outbox uploads automatically, in order, when the app opens, comes back to the
+- **Uploading later**: the outbox uploads automatically, in order (changes made while an upload is running join the same run), when the app opens, comes back to the
   foreground, or every 20 seconds while something is waiting. There's also an **Upload now** button.
 - **No duplicates**: each queued change has a random ID sent as the `Idempotency-Key` header. If a retry
   repeats something the server already did, the server replays its original answer instead of doing it twice
@@ -289,8 +348,11 @@ Include the date/time the user did the thing in the body (not when it uploads), 
 
 - [x] Home screen: weekly training widget (tap a day to see its sessions)
 - [x] Log training sessions from the app (works offline)
-- [ ] Stats page (sub tally: subs vs taps per week, techniques over time, Gi vs No-Gi, most common subs)
+- [x] Stats → Fitness: water and weight tracking
+- [ ] Stats → BJJ progress (sub tally: subs vs taps per week, techniques over time, Gi vs No-Gi, most common subs)
 - [x] Voice notes for what went right / wrong (OpenAI)
+- [x] Quick Log with voice dump; one-focus practice loop; partner tags; rule-based insights; JSON / CSV export
+- [ ] Rounds within a session (per-round partner, result and energy, for fatigue-by-round insights)
 - [x] Lock `/users` endpoints to the logged-in user / admins
 - [x] Lock `/sessions` endpoints to the logged-in user
 - [ ] Belt and stripe progress tracking

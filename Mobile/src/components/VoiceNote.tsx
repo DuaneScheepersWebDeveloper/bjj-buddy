@@ -13,6 +13,22 @@ export type VoiceField = 'went_right' | 'went_wrong' | 'to_improve';
 type VoiceStatus = { enabled: boolean; max_seconds: number };
 type VoiceResult = { transcript: string; text: string; tidied: boolean };
 
+/** What the voice dump pulled out of a spoken recap (see Backend/app/voice.py clean_extraction). */
+export type SessionDetails = {
+  went_right: string | null;
+  went_wrong: string | null;
+  adjustment: string | null;
+  worked_on_focus: boolean | null;
+  energy: number | null;
+  duration_min: number | null;
+  attire: 'gi' | 'nogi' | null;
+  session_type: 'class' | 'open_mat' | 'private' | 'competition' | null;
+  location: string | null;
+  entries: { name: string; category: string; position: string; result: 'hit' | 'conceded'; count: number }[];
+  partners: { name: string | null; traits: string[]; outcome: string | null }[];
+};
+export type VoiceDump = { transcript: string; details: SessionDetails | null };
+
 // Remembered once the server says voice notes are switched on (until the app restarts).
 let statusCache: VoiceStatus | null = null;
 const DEFAULT_MAX_SECONDS = 300;
@@ -33,6 +49,7 @@ type State =
   | { kind: 'working'; startedAt: number }
   | { kind: 'waiting'; uri: string } // recorded offline: turns into text when back online
   | { kind: 'review'; result: VoiceResult }
+  | { kind: 'dump'; result: VoiceDump }
   | { kind: 'error'; message: string; uri?: string };
 
 const clock = (ms: number) => {
@@ -70,19 +87,47 @@ const MIN_BYTES = 2000;
 const NOT_SET_UP =
   "Voice notes aren't switched on yet. Add OPENAI_API_KEY to Backend/.env on your PC, then restart the API (see “Voice notes” in the README).";
 
-type Props = {
+type NoteProps = {
   field: VoiceField;
   /** What's already typed in the box (decides whether to offer "Add" or "Use"). */
   current: string | null;
   onUse: (text: string) => void;
+  mode?: undefined;
 };
+
+/** Voice dump: one recording about the whole session fills in the Quick Log. */
+type SessionProps = {
+  mode: 'session';
+  /** Helps the AI: your current focus, partners' names you've used, and today's date. */
+  context: { focus: string | null; partners: string[]; today: string };
+  onDetails: (dump: VoiceDump) => void;
+};
+
+type Props = NoteProps | SessionProps;
+
+/** "energy, 3 techniques, 2 partners" */
+function summarise(d: SessionDetails): string {
+  const bits: string[] = [];
+  if (d.went_right) bits.push('what went right');
+  if (d.went_wrong) bits.push('what went wrong');
+  if (d.adjustment) bits.push('your next adjustment');
+  if (d.entries.length) bits.push(`${d.entries.length} technique${d.entries.length === 1 ? '' : 's'}`);
+  if (d.partners.length) bits.push(`${d.partners.length} partner${d.partners.length === 1 ? '' : 's'}`);
+  if (d.energy) bits.push('energy');
+  if (d.worked_on_focus != null) bits.push('your focus');
+  if (d.duration_min || d.attire || d.session_type || d.location) bits.push('session details');
+  return bits.join(', ');
+}
 
 /**
  * Record a voice note instead of typing. You talk, it comes back as clear written notes
  * (BJJ terms spelled right), and you choose to use it, add it to what you typed, or discard it.
  * Recorded with no signal? It's kept and turned into text when you're back online.
  */
-export function VoiceNote({ field, current, onUse }: Props) {
+export function VoiceNote(props: Props) {
+  const session = props.mode === 'session';
+  const field = props.mode === 'session' ? null : props.field;
+  const current = props.mode === 'session' ? null : props.current;
   const styles = useStyles();
   const { colors } = useTheme();
   const { request } = useAuth();
@@ -167,14 +212,21 @@ export function VoiceNote({ field, current, onUse }: Props) {
           });
           return;
         }
+        const filename = uri.split('/').pop()?.split('?')[0] ?? null;
+        if (props.mode === 'session') {
+          const result = await request<VoiceDump>('/voice/session', {
+            method: 'POST',
+            body: { audio_base64, filename, recorded_ms: recordedMs ?? null, ...props.context },
+            timeoutMs: 90_000,
+          });
+          if (id !== run.current) return;
+          setShowWords(false);
+          setState({ kind: 'dump', result });
+          return;
+        }
         const result = await request<VoiceResult>('/voice/notes', {
           method: 'POST',
-          body: {
-            audio_base64,
-            field,
-            filename: uri.split('/').pop()?.split('?')[0] ?? null,
-            recorded_ms: recordedMs ?? null,
-          },
+          body: { audio_base64, field, filename, recorded_ms: recordedMs ?? null },
           timeoutMs: 90_000,
         });
         if (id !== run.current) return; // cancelled
@@ -195,7 +247,8 @@ export function VoiceNote({ field, current, onUse }: Props) {
         else setState({ kind: 'error', message: err instanceof ApiError ? err.message : 'Something went wrong. Please try again.', uri });
       }
     },
-    [request, field],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [request, field, session],
   );
 
   // Recorded offline: try again as soon as the phone is back online.
@@ -276,7 +329,11 @@ export function VoiceNote({ field, current, onUse }: Props) {
           </Text>
           <Text style={styles.recLimit}>{left < 30_000 ? `${Math.ceil(left / 1000)} s left` : `of ${clock(maxSeconds * 1000)}`}</Text>
         </View>
-        <Text style={styles.hint}>Talk like you'd tell a training partner. Take your time.</Text>
+        <Text style={styles.hint}>
+          {session
+            ? 'What you worked on, what worked, what didn\'t, who you rolled with, how you felt, and one thing to change next time.'
+            : "Talk like you'd tell a training partner. Take your time."}
+        </Text>
         <View style={styles.row}>
           <Pressable onPress={() => stop(false)} hitSlop={8} accessibilityRole="button" style={styles.textBtn}>
             <Text style={styles.textBtnText}>Cancel</Text>
@@ -310,7 +367,9 @@ export function VoiceNote({ field, current, onUse }: Props) {
       <View style={styles.box}>
         <View style={styles.centerRow}>
           <ActivityIndicator color={colors.text} />
-          <Text style={styles.workingText}>Turning your voice note into text… {secs > 2 ? `${secs} s` : ''}</Text>
+          <Text style={styles.workingText}>
+            {session ? 'Filling in your log…' : 'Turning your voice note into text…'} {secs > 2 ? `${secs} s` : ''}
+          </Text>
         </View>
         <Text style={[styles.hint, styles.workingHint]}>
           {secs < 20 ? 'Usually takes a few seconds.' : 'Taking longer than usual. Weak signal? You can cancel and try again.'}
@@ -350,8 +409,45 @@ export function VoiceNote({ field, current, onUse }: Props) {
     );
   }
 
-  if (state.kind === 'review') {
+  if (state.kind === 'dump' && props.mode === 'session') {
     const { result } = state;
+    const found = result.details ? summarise(result.details) : '';
+    const use = () => {
+      props.onDetails(result);
+      setState({ kind: 'idle' });
+    };
+    return (
+      <View style={[styles.box, styles.reviewBox]}>
+        <Text style={styles.title}>{found ? 'Got it' : 'Got your words'}</Text>
+        <Text style={styles.result}>
+          {found
+            ? `Filled in ${found}. Check it below and change anything that's off.`
+            : "Couldn't sort it into the form, so it'll go in “What went right” for you to tidy."}
+        </Text>
+        <Pressable onPress={() => setShowWords((s) => !s)} hitSlop={8} accessibilityRole="button" style={styles.wordsToggle}>
+          <Text style={styles.wordsToggleText}>{showWords ? 'Hide what you said' : 'Show what you said'}</Text>
+        </Pressable>
+        {showWords ? <Text style={styles.words}>“{result.transcript}”</Text> : null}
+        <View style={styles.reviewActions}>
+          <Pressable onPress={use} accessibilityRole="button" style={({ pressed }) => [styles.useBtn, pressed && styles.pressed]}>
+            <Text style={styles.useBtnText}>Fill in the form</Text>
+          </Pressable>
+        </View>
+        <View style={styles.row}>
+          <Pressable onPress={() => setState({ kind: 'idle' })} hitSlop={8} accessibilityRole="button" style={styles.textBtn}>
+            <Text style={styles.textBtnText}>Discard</Text>
+          </Pressable>
+          <Pressable onPress={start} hitSlop={8} accessibilityRole="button" style={styles.textBtn}>
+            <Text style={styles.textBtnText}>Record again</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (state.kind === 'review' && props.mode !== 'session') {
+    const { result } = state;
+    const { onUse } = props;
     const use = (text: string) => {
       onUse(text);
       setState({ kind: 'idle' });
@@ -409,16 +505,18 @@ export function VoiceNote({ field, current, onUse }: Props) {
       <Pressable
         onPress={start}
         accessibilityRole="button"
-        accessibilityLabel="Record a voice note instead of typing"
-        style={({ pressed }) => [styles.micBtn, pressed && styles.pressed]}
+        accessibilityLabel={session ? 'Talk through your session and fill in the form' : 'Record a voice note instead of typing'}
+        style={({ pressed }) => [styles.micBtn, session && styles.micBtnBig, pressed && styles.pressed]}
       >
         <View style={styles.micIcon}>
           <View style={styles.micHead} />
           <View style={styles.micStand} />
         </View>
         <View style={styles.flex}>
-          <Text style={styles.micTitle}>Record instead</Text>
-          <Text style={styles.micSub}>Talk it through; it comes back as clear notes</Text>
+          <Text style={styles.micTitle}>{session ? 'Talk it through' : 'Record instead'}</Text>
+          <Text style={styles.micSub}>
+            {session ? 'Say how it went and the form fills itself in' : 'Talk it through; it comes back as clear notes'}
+          </Text>
         </View>
       </Pressable>
     </View>
@@ -454,6 +552,7 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: space(3),
     paddingHorizontal: space(4),
   },
+  micBtnBig: { marginTop: 0, borderStyle: 'solid', borderColor: colors.danger, paddingVertical: space(4) },
   micIcon: {
     width: 36,
     height: 36,

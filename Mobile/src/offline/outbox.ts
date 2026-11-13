@@ -81,37 +81,41 @@ export function isRetryable(err: unknown): boolean {
   return err.status === 0 || err.status === 401 || err.status === 408 || err.status === 429 || err.status >= 500;
 }
 
-export type FlushResult = { items: OutboxItem[]; sent: number; offline: boolean };
+export type FlushResult = { sent: number; offline: boolean };
+/** A change to the outbox, applied to whatever the list holds at that moment. */
+export type OutboxChange = (latest: OutboxItem[]) => OutboxItem[];
 
 /**
  * Send waiting items in order. Stops at the first one that can't be sent right now
  * (offline / server trouble) so later changes never overtake earlier ones.
  * Items the server rejects are marked 'failed' and skipped.
+ *
+ * Works on the LIVE list (getItems), not a copy: changes made while uploading (a new save,
+ * or an edit merged into a waiting one) are picked up in this same run and never lost.
  */
 export async function flush(
-  items: OutboxItem[],
+  getItems: () => OutboxItem[],
   send: (item: OutboxItem) => Promise<unknown>,
-  onProgress?: (items: OutboxItem[]) => void,
+  apply: (change: OutboxChange) => void,
 ): Promise<FlushResult> {
-  let current = [...items];
   let sent = 0;
-  for (const item of items) {
-    if (item.state !== 'pending') continue;
+  const tried = new Set<string>();
+  for (;;) {
+    const item = getItems().find((x) => x.state === 'pending' && !tried.has(x.id));
+    if (!item) return { sent, offline: false };
+    tried.add(item.id);
     try {
       await send(item);
-      current = current.filter((x) => x.id !== item.id);
+      apply((latest) => latest.filter((x) => x.id !== item.id));
       sent++;
-      onProgress?.(current);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (isRetryable(err)) {
-        current = current.map((x) => (x.id === item.id ? { ...x, attempts: x.attempts + 1, lastError: message } : x));
+        apply((latest) => latest.map((x) => (x.id === item.id ? { ...x, attempts: x.attempts + 1, lastError: message } : x)));
         const offline = err instanceof ApiError && err.status === 0;
-        return { items: current, sent, offline };
+        return { sent, offline };
       }
-      current = current.map((x) => (x.id === item.id ? { ...x, state: 'failed', lastError: message } : x));
-      onProgress?.(current);
+      apply((latest) => latest.map((x) => (x.id === item.id ? { ...x, state: 'failed', lastError: message } : x)));
     }
   }
-  return { items: current, sent, offline: false };
 }

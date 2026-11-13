@@ -2,7 +2,8 @@ from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine, Session, select
 from app.config import settings
 from app.models.user_model import User
-from app.models.training_model import SessionEntry, SessionNote, Technique, TrainingSession  # noqa: F401 (registers tables)
+from app.models.training_model import Focus, SessionEntry, SessionNote, Technique, TrainingSession  # noqa: F401 (registers tables)
+from app.models.fitness_model import WaterLog, WeightEntry  # noqa: F401 (registers tables)
 from app.models.error_log_model import ErrorLog  # noqa: F401 (registers table)
 from app.models.auth_token_model import AuthToken  # noqa: F401 (registers table)
 from app.models.password_reset_model import PasswordResetCode  # noqa: F401 (registers table)
@@ -33,6 +34,17 @@ _ADD_MISSING_COLUMNS = [
     """CREATE UNIQUE INDEX IF NOT EXISTS ix_technique_name_owner ON technique (lower(name), coalesce(user_id, 0))""",
     """CREATE INDEX IF NOT EXISTS ix_training_session_user_day ON training_session (user_id, trained_on DESC)""",
     """CREATE UNIQUE INDEX IF NOT EXISTS ix_session_note_once ON session_note (session_id, coach_id)""",
+    # One weight and one water total per person per day.
+    """CREATE UNIQUE INDEX IF NOT EXISTS ix_weight_entry_day ON weight_entry (user_id, day)""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS ix_water_log_day ON water_log (user_id, day)""",
+    # Quick Log / focus loop.
+    """ALTER TABLE training_session ADD COLUMN IF NOT EXISTS focus_id VARCHAR(40)""",
+    """ALTER TABLE training_session ADD COLUMN IF NOT EXISTS energy INTEGER""",
+    """ALTER TABLE training_session ADD COLUMN IF NOT EXISTS adjustment VARCHAR""",
+    """ALTER TABLE training_session ADD COLUMN IF NOT EXISTS partners JSON NOT NULL DEFAULT '[]'""",
+    """CREATE INDEX IF NOT EXISTS ix_training_session_focus_id ON training_session (focus_id)""",
+    # Only one active focus per person.
+    """CREATE UNIQUE INDEX IF NOT EXISTS ix_focus_one_active ON focus (user_id) WHERE ended_on IS NULL""",
 ]
 
 def create_db_and_tables():

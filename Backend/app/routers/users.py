@@ -5,7 +5,8 @@ from app.database import get_session
 from app.models.user_model import User
 from app.models.auth_token_model import AuthToken
 from app.models.password_reset_model import PasswordResetCode
-from app.models.training_model import SessionNote, TrainingSession
+from app.models.training_model import Focus, SessionNote, TrainingSession
+from app.models.fitness_model import WaterLog, WeightEntry
 from app.schemas import UserPublic
 from app.security import get_current_user, hash_password, require_admin
 from app.usernames import clean_username, username_taken
@@ -168,6 +169,10 @@ def delete_user(user_id: int, admin: User = Depends(require_admin), session: Ses
     # Notes they left as a coach on other people's sessions.
     for note in session.exec(select(SessionNote).where(SessionNote.coach_id == user.id)).all():
         session.delete(note)
+    for row in [*session.exec(select(WeightEntry).where(WeightEntry.user_id == user.id)).all(),
+                *session.exec(select(WaterLog).where(WaterLog.user_id == user.id)).all(),
+                *session.exec(select(Focus).where(Focus.user_id == user.id)).all()]:
+        session.delete(row)
     session.flush()
     session.delete(user)
     session.commit()

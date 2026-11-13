@@ -94,11 +94,16 @@ export function OfflineSyncProvider({ children }: { children: ReactNode }) {
     busy.current = true;
     setSyncing(true);
     try {
-      const result = await flush(itemsRef.current, send, (progress) => {
-        itemsRef.current = progress;
-        setItems(progress);
-      });
-      await commit(result.items);
+      const result = await flush(
+        () => itemsRef.current,
+        send,
+        (change) => {
+          const next = change(itemsRef.current);
+          itemsRef.current = next;
+          setItems(next);
+        },
+      );
+      await commit(itemsRef.current);
       setOffline(result.offline);
       if (result.sent > 0) {
         setLastUploadAt(Date.now());

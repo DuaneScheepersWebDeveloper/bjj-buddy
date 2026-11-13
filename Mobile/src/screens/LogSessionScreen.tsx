@@ -9,11 +9,17 @@ import { TechniquePicker } from '../components/TechniquePicker';
 import { TechniqueIcon } from '../components/TechniqueIcon';
 import { VoiceNote, type VoiceField } from '../components/VoiceNote';
 import { CalendarPicker } from '../components/CalendarPicker';
+import { EnergyPicker, FeedbackList, FocusCheck, PartnerPicker } from '../components/Reflection';
+import { useFocus } from '../focus/FocusContext';
+import { feedbackFor, type Feedback } from '../insights/insights';
 import { radius, space } from '../theme';
 import { makeStyles, useTheme } from '../ThemeContext';
 import {
   ATTIRE_LABEL,
   CATEGORY_ONE,
+  ENERGY_LABEL,
+  OUTCOME_LABEL,
+  TRAIT_LABEL,
   MAX_NOTES,
   POSITION_LABEL,
   SESSION_TYPES,
@@ -64,6 +70,9 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
     for (const s of sessions) for (const e of s.entries) counts[e.name.toLowerCase()] = (counts[e.name.toLowerCase()] ?? 0) + e.count;
     return counts;
   }, [sessions]);
+  const { active: focus, all: focuses } = useFocus();
+  const partnerHistory = useMemo(() => sessions.map((s) => s.partners), [sessions]);
+  const [feedback, setFeedback] = useState<Feedback[]>([]);
   const userId = user?.id ?? 0;
   const editing = editId ? sessions.find((s) => s.id === editId) ?? null : null;
 
@@ -114,6 +123,10 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
       to_improve: null,
       entries: [],
       created_at: new Date().toISOString(),
+      focus_id: focus?.id ?? null,
+      energy: null,
+      adjustment: null,
+      partners: [],
     };
   }
 
@@ -170,13 +183,26 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
     if (!draft || saving) return;
     setSaving(true);
     try {
-      await saveSession({
+      const clean: SessionDraft = {
         ...draft,
         location: draft.location?.trim() || null,
         went_right: draft.went_right?.trim() || null,
         went_wrong: draft.went_wrong?.trim() || null,
         to_improve: draft.to_improve?.trim() || null,
-      });
+        adjustment: draft.adjustment?.trim() || null,
+        partners: (draft.partners ?? []).filter((p) => p.name || p.traits.length || p.outcome),
+      };
+      await saveSession(clean);
+      if (!editId) {
+        const t = tally(clean.entries);
+        setFeedback(
+          feedbackFor(
+            { ...clean, subs_for: t.subsFor, subs_against: t.subsAgainst, updated_at: new Date().toISOString() },
+            sessions.filter((x) => x.id !== clean.id),
+            focus,
+          ),
+        );
+      }
       if (!editId) await AsyncStorage.removeItem(draftKey(userId)).catch(() => {});
       setSaved(true);
       scrollToTop();
@@ -208,6 +234,8 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
   }
 
   const { subsFor, subsAgainst } = tally(draft.entries);
+  // The focus this session counts toward: the one it was logged against, or your current one.
+  const sessionFocus = (draft.focus_id ? focuses.find((f) => f.id === draft.focus_id) : null) ?? focus;
 
   // --- Saved -------------------------------------------------------------------
   if (saved) {
@@ -222,6 +250,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             {dayLabel(draft.trained_on)} · {formatDuration(draft.duration_min)} · {ATTIRE_LABEL[draft.attire]}
           </Text>
           <Score subsFor={subsFor} subsAgainst={subsAgainst} />
+          <FeedbackList items={feedback} />
         </View>
         <PrimaryButton title="Back to home" onPress={onDone} />
         {!editId ? (
@@ -410,6 +439,32 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             />
           </View>
 
+          <View style={styles.card}>
+            <SectionHeader title="Reflection" subtitle="A few taps: it's what the insights are built on" />
+            <FocusCheck
+              focus={sessionFocus}
+              on={!!sessionFocus && draft.focus_id === sessionFocus.id}
+              onChange={(on) => update({ focus_id: on && sessionFocus ? sessionFocus.id : null })}
+            />
+            <View style={styles.gap} />
+            <Label>Energy</Label>
+            <EnergyPicker value={draft.energy} onChange={(energy) => update({ energy })} />
+            <View style={styles.gap} />
+            <Label>Who did you roll with? (optional)</Label>
+            <PartnerPicker partners={draft.partners ?? []} onChange={(partners) => update({ partners })} history={partnerHistory} />
+            <View style={styles.gap} />
+            <Label>One thing to change next time</Label>
+            <TextInput
+              value={draft.adjustment ?? ''}
+              onChangeText={(adjustment) => update({ adjustment })}
+              placeholder="e.g. Get my frame in before they settle"
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.accent}
+              maxLength={300}
+              style={styles.input}
+            />
+          </View>
+
           <PrimaryButton title="Next: Review" onPress={() => goTo(3)} />
           <View style={styles.gap} />
           <PrimaryButton title="Back" variant="outline" onPress={() => goTo(1)} />
@@ -462,6 +517,32 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
             ) : null}
           </ReviewCard>
 
+          {sessionFocus || draft.energy || draft.adjustment || draft.partners?.length ? (
+            <ReviewCard title="Reflection" onEdit={() => goTo(2)}>
+              {sessionFocus ? (
+                <ReviewLine
+                  label="Focus"
+                  value={draft.focus_id === sessionFocus.id ? `✓ ${sessionFocus.title}` : 'Not this time'}
+                  muted={draft.focus_id !== sessionFocus.id}
+                />
+              ) : null}
+              <ReviewLine label="Energy" value={draft.energy ? `${draft.energy}/5 · ${ENERGY_LABEL[draft.energy]}` : 'Not set'} muted={!draft.energy} />
+              {(draft.partners ?? []).map((p, i) => (
+                <ReviewLine
+                  key={i}
+                  label={p.name || 'Partner'}
+                  value={[...p.traits.map((t) => TRAIT_LABEL[t]), p.outcome ? OUTCOME_LABEL[p.outcome] : null].filter(Boolean).join(' · ') || '—'}
+                />
+              ))}
+              {draft.adjustment?.trim() ? (
+                <>
+                  <Text style={styles.reviewSub}>Next time</Text>
+                  <ReviewText text={draft.adjustment} empty="" />
+                </>
+              ) : null}
+            </ReviewCard>
+          ) : null}
+
           <PrimaryButton title={editId ? 'Save changes' : 'Save session'} onPress={save} loading={saving} />
           <View style={styles.gap} />
           {editId ? (
@@ -493,7 +574,7 @@ export function LogSessionScreen({ editId, onDone, scrollToTop, setBackHandler }
 
 // --- Pieces -------------------------------------------------------------------------------
 
-function BackLink({ onPress, label = '‹ Home' }: { onPress: () => void; label?: string }) {
+export function BackLink({ onPress, label = '‹ Home' }: { onPress: () => void; label?: string }) {
   const styles = useStyles();
   return (
     <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" style={styles.back}>
@@ -548,7 +629,7 @@ function SectionHeader({ title, subtitle, count, color }: { title: string; subti
 }
 
 /** "Today", or a calendar to pick any other day (future days can't be picked). */
-function DayPicker({ value, onChange, marked }: { value: string; onChange: (ymd: string) => void; marked: Set<string> }) {
+export function DayPicker({ value, onChange, marked }: { value: string; onChange: (ymd: string) => void; marked: Set<string> }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const today = toYMD(new Date());
@@ -592,7 +673,7 @@ function DayPicker({ value, onChange, marked }: { value: string; onChange: (ymd:
   );
 }
 
-function RecentPlaces({ current, places, onPick }: { current: string | null; places: (string | null | undefined)[]; onPick: (p: string) => void }) {
+export function RecentPlaces({ current, places, onPick }: { current: string | null; places: (string | null | undefined)[]; onPick: (p: string) => void }) {
   const styles = useStyles();
   const unique: string[] = [];
   for (const p of places) {

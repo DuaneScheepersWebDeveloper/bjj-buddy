@@ -80,6 +80,22 @@ class EntryOut(BaseModel):
     technique_id: Optional[int]
 
 
+PartnerTrait = Literal["bigger", "smaller", "stronger", "faster", "flexible", "higher_belt", "lower_belt", "same_belt"]
+
+
+class PartnerIn(BaseModel):
+    """Someone you rolled with. A name, a few traits, or both."""
+
+    name: Optional[str] = Field(default=None, max_length=40)
+    traits: list[PartnerTrait] = Field(default_factory=list, max_length=8)
+    outcome: Optional[Literal["tapped_them", "tapped_by", "even"]] = None
+
+    @field_validator("name")
+    @classmethod
+    def _name(cls, v: Optional[str]) -> Optional[str]:
+        return _tidy(" ".join(v.split())) if v else None
+
+
 class SessionIn(BaseModel):
     trained_on: date
     location: Optional[str] = Field(default=None, max_length=80)
@@ -90,10 +106,15 @@ class SessionIn(BaseModel):
     went_wrong: Optional[str] = Field(default=None, max_length=MAX_TEXT)
     to_improve: Optional[str] = Field(default=None, max_length=MAX_TEXT)
     entries: list[EntryIn] = Field(default_factory=list, max_length=100)
+    # Quick Log / focus loop (all optional).
+    focus_id: Optional[str] = Field(default=None, max_length=40)
+    energy: Optional[int] = Field(default=None, ge=1, le=5)
+    adjustment: Optional[str] = Field(default=None, max_length=300)
+    partners: list[PartnerIn] = Field(default_factory=list, max_length=20)
     # When it was first logged on the phone (optional; defaults to now).
     created_at: Optional[datetime] = None
 
-    @field_validator("location", "went_right", "went_wrong", "to_improve")
+    @field_validator("location", "went_right", "went_wrong", "to_improve", "adjustment", "focus_id")
     @classmethod
     def _text(cls, v: Optional[str]) -> Optional[str]:
         return _tidy(v)
@@ -119,6 +140,10 @@ class SessionOut(BaseModel):
     went_right: Optional[str]
     went_wrong: Optional[str]
     to_improve: Optional[str]
+    focus_id: Optional[str] = None
+    energy: Optional[int] = None
+    adjustment: Optional[str] = None
+    partners: list[dict] = []
     entries: list[EntryOut]
     subs_for: int  # submissions you got
     subs_against: int  # times you were submitted
@@ -181,6 +206,10 @@ def _out(s: TrainingSession, entries: list[SessionEntry], notes: Optional[list[C
         went_right=s.went_right,
         went_wrong=s.went_wrong,
         to_improve=s.to_improve,
+        focus_id=s.focus_id,
+        energy=s.energy,
+        adjustment=s.adjustment,
+        partners=list(s.partners or []),
         entries=[
             EntryOut(
                 name=e.name,
@@ -335,7 +364,10 @@ def save_session(
 
 
 def _fields(body: SessionIn) -> dict:
-    return body.model_dump(exclude={"entries", "created_at"})
+    fields = body.model_dump(exclude={"entries", "created_at", "partners"})
+    # Leave out empty partner details so the stored JSON stays small.
+    fields["partners"] = [p.model_dump(exclude_none=True) for p in body.partners if p.name or p.traits or p.outcome]
+    return fields
 
 
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

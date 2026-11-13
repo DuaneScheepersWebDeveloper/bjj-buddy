@@ -1,4 +1,9 @@
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useAuth } from '../auth/AuthContext';
+import { useSessions } from '../sessions/SessionsContext';
+import { useFocus } from '../focus/FocusContext';
+import { exportData, type ExportFormat } from '../lib/exportData';
 import { darkColors, lightColors, radius, space, type Palette } from '../theme';
 import { makeStyles, useTheme, type ThemePreference } from '../ThemeContext';
 
@@ -8,10 +13,23 @@ const APPEARANCE: { id: ThemePreference; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: "Matches your phone's setting" },
 ];
 
-/** App settings. For now: Appearance (light / dark / follow the phone). */
+/** App settings: Appearance (light / dark / follow the phone) and exporting your data. */
 export function SettingsScreen({ onBack }: { onBack: () => void }) {
   const styles = useStyles();
   const { preference, setPreference, scheme } = useTheme();
+  const { user } = useAuth();
+  const { sessions } = useSessions();
+  const { all: focuses } = useFocus();
+  const [exportNote, setExportNote] = useState<string | null>(null);
+
+  async function doExport(format: ExportFormat) {
+    try {
+      const r = await exportData(format, sessions, focuses, user?.full_name);
+      setExportNote(r === 'downloaded' ? 'Downloaded.' : r === 'shared' ? 'Sent.' : null);
+    } catch {
+      setExportNote("Couldn't export. Please try again.");
+    }
+  }
 
   return (
     <View>
@@ -48,6 +66,29 @@ export function SettingsScreen({ onBack }: { onBack: () => void }) {
             ? `Following your phone, which is set to ${scheme} right now.`
             : 'Saved on this device.'}
         </Text>
+      </View>
+
+      <Text style={styles.sectionLabel}>YOUR DATA</Text>
+      <View style={styles.card}>
+        <Text style={styles.dataText}>
+          {sessions.length} session{sessions.length === 1 ? '' : 's'} and {focuses.length} focus{focuses.length === 1 ? '' : 'es'}. Export
+          a copy to keep or open in a spreadsheet.
+        </Text>
+        <View style={styles.options}>
+          {(['csv', 'json'] as ExportFormat[]).map((f) => (
+            <Pressable
+              key={f}
+              onPress={() => doExport(f)}
+              accessibilityRole="button"
+              accessibilityLabel={f === 'csv' ? 'Export as CSV for spreadsheets' : 'Export everything as JSON'}
+              style={({ pressed }) => [styles.option, styles.exportBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.exportTitle}>{f.toUpperCase()}</Text>
+              <Text style={styles.exportHint}>{f === 'csv' ? 'For Excel or Sheets' : 'Everything, for backups'}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {exportNote ? <Text style={styles.note}>{exportNote}</Text> : null}
       </View>
     </View>
   );
@@ -154,4 +195,8 @@ const useStyles = makeStyles((colors) => ({
   radioOn: { borderColor: colors.accent },
   radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
   note: { color: colors.textMuted, fontSize: 13, marginTop: space(4), textAlign: 'center' },
+  dataText: { color: colors.text, fontSize: 14, lineHeight: 20, marginBottom: space(4) },
+  exportBtn: { gap: 2 },
+  exportTitle: { color: colors.text, fontSize: 16, fontWeight: '900' },
+  exportHint: { color: colors.textMuted, fontSize: 12, fontWeight: '600', textAlign: 'center' },
 }));

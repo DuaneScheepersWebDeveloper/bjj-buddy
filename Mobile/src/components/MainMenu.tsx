@@ -1,6 +1,7 @@
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { User } from '../lib/api';
-import { menuItemsFor, type SectionId } from '../navigation/menuItems';
+import { useState } from 'react';
+import { hasChildren, menuItem, menuItemsFor, type SectionId } from '../navigation/menuItems';
 import { formatRank } from './BeltBadge';
 import { Avatar } from './Avatar';
 import { radius, space } from '../theme';
@@ -24,6 +25,11 @@ type Props = {
 export function MainMenu({ progress, mounted, top, user, active, onSelect, onSignOut, onClose }: Props) {
   const styles = useStyles();
   const { width, height } = useWindowDimensions();
+  // Which folder-style items (e.g. Stats) are open. The one holding the current page starts open.
+  const activeParent = active ? menuItem(active)?.parent ?? null : null;
+  const [toggled, setToggled] = useState<Partial<Record<SectionId, boolean>>>({});
+  const isOpen = (id: SectionId) => toggled[id] ?? activeParent === id;
+  const toggle = (id: SectionId) => setToggled((t) => ({ ...t, [id]: !isOpen(id) }));
   if (!mounted) return null;
 
   const panelWidth = Math.min(320, width - space(8));
@@ -72,6 +78,8 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
           keyboardShouldPersistTaps="handled"
         >
           {menuItemsFor(user?.role).map((item, i, all) => {
+            if (item.parent && !isOpen(item.parent)) return null; // sub-item of a closed folder
+            const folder = hasChildren(item.id);
             const isActive = item.id === active;
             const firstAdmin = item.adminOnly && !all[i - 1]?.adminOnly;
             const firstCoach = item.coachOnly && !all[i - 1]?.coachOnly;
@@ -84,17 +92,21 @@ export function MainMenu({ progress, mounted, top, user, active, onSelect, onSig
                   </View>
                 ) : null}
                 <Pressable
-                  onPress={() => onSelect(item.id)}
+                  onPress={() => (folder ? toggle(item.id) : onSelect(item.id))}
                   accessibilityRole="menuitem"
-                  accessibilityState={{ selected: isActive }}
-                  style={({ pressed }) => [styles.item, (pressed || isActive) && styles.itemPressed]}
+                  accessibilityState={folder ? { expanded: isOpen(item.id) } : { selected: isActive }}
+                  style={({ pressed }) => [
+                    styles.item,
+                    item.parent && styles.subItem,
+                    (pressed || isActive) && styles.itemPressed,
+                  ]}
                 >
                   <View style={[styles.marker, item.primary && styles.markerPrimary, isActive && styles.markerActive]} />
                   <View style={styles.itemText}>
                     <Text style={[styles.itemLabel, item.primary && styles.itemLabelPrimary]}>{item.label}</Text>
                     <Text style={styles.itemHint} numberOfLines={1}>{item.hint}</Text>
                   </View>
-                  <Text style={styles.chevron}>›</Text>
+                  <Text style={[styles.chevron, folder && isOpen(item.id) && styles.chevronOpen]}>›</Text>
                 </Pressable>
               </View>
             );
@@ -157,6 +169,8 @@ const useStyles = makeStyles((colors) => ({
     paddingVertical: space(2),
   },
   itemPressed: { backgroundColor: colors.surfaceRaised },
+  // Indented under its folder, with a thin line on the left.
+  subItem: { paddingLeft: space(8), paddingVertical: space(2) + 2 },
   marker: { width: 3, alignSelf: 'stretch', borderRadius: 2, marginRight: space(3), backgroundColor: 'transparent' },
   markerPrimary: { backgroundColor: colors.accent },
   markerActive: { backgroundColor: colors.text },
@@ -165,6 +179,7 @@ const useStyles = makeStyles((colors) => ({
   itemLabelPrimary: { fontWeight: '800' },
   itemHint: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
   chevron: { color: colors.textMuted, fontSize: 22, marginLeft: space(2) },
+  chevronOpen: { transform: [{ rotate: '90deg' }] },
   signOut: { minHeight: 48 },
   signOutText: { color: colors.danger, fontSize: 15, fontWeight: '600', paddingLeft: space(1) },
 }));

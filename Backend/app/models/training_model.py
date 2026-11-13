@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 
@@ -40,6 +41,37 @@ class TrainingSession(SQLModel, table=True):
     went_right: Optional[str] = None
     went_wrong: Optional[str] = None
     to_improve: Optional[str] = None
+    # Deliberate-practice loop (Quick Log). All optional so older logs stay valid.
+    # focus_id: the focus you worked on this session (no foreign key on purpose: the
+    #   phone may upload a session before or after the focus it belongs to).
+    focus_id: Optional[str] = Field(default=None, max_length=40, index=True)
+    energy: Optional[int] = None  # 1 (empty tank) .. 5 (felt great)
+    adjustment: Optional[str] = None  # the ONE thing to change next time
+    # Who you rolled with: [{"name": "Sam", "traits": ["bigger"], "outcome": "tapped_by"}].
+    # JSON so new partner details can be added later without a migration.
+    partners: list = Field(default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]"))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Focus(SQLModel, table=True):
+    """The ONE thing you're deliberately working on, e.g. "Knee-cut pass".
+
+    Only one is active at a time (ended_on is NULL). Ending it keeps it as history, with an
+    outcome and a short reflection. The id is a UUID from the phone, like sessions.
+    """
+
+    __tablename__ = "focus"
+
+    id: str = Field(primary_key=True, max_length=40)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    title: str
+    why: Optional[str] = None  # what you want to get better at, in your words
+    target_sessions: int = Field(default=8)  # sessions before it's time to review it
+    started_on: date
+    ended_on: Optional[date] = None  # NULL = this is your active focus
+    outcome: Optional[str] = None  # got_it | keep_going | parked
+    reflection: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

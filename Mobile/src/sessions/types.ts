@@ -25,6 +25,34 @@ export type Entry = {
   technique_id?: number | null;
 };
 
+/** How someone you rolled with compares to you. */
+export type PartnerTrait = 'bigger' | 'smaller' | 'stronger' | 'faster' | 'flexible' | 'higher_belt' | 'lower_belt' | 'same_belt';
+/** tapped_them = you submitted them; tapped_by = they submitted you. */
+export type PartnerOutcome = 'tapped_them' | 'tapped_by' | 'even';
+
+/** Someone you rolled with: a name, some traits, or both. */
+export type Partner = { name?: string | null; traits: PartnerTrait[]; outcome?: PartnerOutcome | null };
+
+export const PARTNER_TRAITS: { id: PartnerTrait; label: string }[] = [
+  { id: 'bigger', label: 'Bigger' },
+  { id: 'smaller', label: 'Smaller' },
+  { id: 'stronger', label: 'Stronger' },
+  { id: 'faster', label: 'Faster' },
+  { id: 'flexible', label: 'Flexible' },
+  { id: 'higher_belt', label: 'Higher belt' },
+  { id: 'same_belt', label: 'Same belt' },
+  { id: 'lower_belt', label: 'Lower belt' },
+];
+export const TRAIT_LABEL = Object.fromEntries(PARTNER_TRAITS.map((t) => [t.id, t.label])) as Record<PartnerTrait, string>;
+export const OUTCOME_LABEL: Record<PartnerOutcome, string> = {
+  tapped_them: 'I tapped them',
+  tapped_by: 'They tapped me',
+  even: 'Even',
+};
+
+/** 1 = empty tank … 5 = felt great. */
+export const ENERGY_LABEL = ['', 'Gassed', 'Tired', 'Okay', 'Good', 'Sharp'];
+
 /** What the phone sends (PUT /sessions/{id}). */
 export type SessionDraft = {
   id: string;
@@ -39,6 +67,36 @@ export type SessionDraft = {
   to_improve: string | null;
   entries: Entry[];
   created_at: string;
+  // Deliberate-practice loop (optional, so sessions logged before it still fit).
+  /** The focus you worked on in this session, if you did. */
+  focus_id?: string | null;
+  energy?: number | null;
+  /** The ONE thing to change next time. */
+  adjustment?: string | null;
+  partners?: Partner[];
+};
+
+/** The ONE thing you're working on (matches Backend/app/routers/focus.py). */
+export type Focus = {
+  id: string;
+  title: string;
+  why: string | null;
+  /** Sessions on it before it's time to review it. */
+  target_sessions: number;
+  started_on: string;
+  /** null = your active focus. */
+  ended_on: string | null;
+  outcome: FocusOutcome | null;
+  reflection: string | null;
+  created_at: string;
+  updated_at: string;
+  unsynced?: boolean;
+};
+export type FocusOutcome = 'got_it' | 'keep_going' | 'parked';
+export const FOCUS_OUTCOME_LABEL: Record<FocusOutcome, string> = {
+  got_it: 'Got it',
+  keep_going: 'Kept going',
+  parked: 'Parked',
 };
 
 /** A session as shown in the app (from the server, or saved on the phone waiting to upload). */
